@@ -1114,6 +1114,8 @@ fn withdraw_reduces_balance() {
 #[test]
 fn withdraw_insufficient_balance_fails() {
     let env = Env::default();
+    env.mock_all_auths();
+
     let owner = Address::generate(&env);
     let contract_id = env.register(CalloraVault {}, ());
     let client = CalloraVaultClient::new(&env, &contract_id);
@@ -1195,6 +1197,67 @@ fn withdraw_to_reduces_balance() {
 #[test]
 fn withdraw_to_insufficient_balance_fails() {
     let env = Env::default();
+    let owner = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let contract_id = env.register(CalloraVault {}, ());
+    let client = CalloraVaultClient::new(&env, &contract_id);
+    let (usdc_token, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &contract_id, 100);
+    client.init(&owner, &usdc_token, &Some(100), &None, &None, &None);
+
+    let result = client.try_withdraw_to(&recipient, &500);
+    assert!(result.is_err(), "expected error for insufficient balance");
+}
+
+#[test]
+fn deposit_below_minimum_fails() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let contract_id = env.register(CalloraVault {}, ());
+    let client = CalloraVaultClient::new(&env, &contract_id);
+    let (usdc_token, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &contract_id, 100);
+    client.init(&owner, &usdc_token, &Some(100), &Some(50), &None, &None);
+
+    fund_vault(&usdc_admin, &depositor, 30);
+    let usdc_client = token::Client::new(&env, &usdc_token);
+    usdc_client.approve(&depositor, &contract_id, &30, &1000);
+    let result = client.try_deposit(&depositor, &30);
+    assert!(result.is_err(), "expected error for deposit below minimum");
+}
+
+#[test]
+fn deposit_at_minimum_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let contract_id = env.register(CalloraVault {}, ());
+    let client = CalloraVaultClient::new(&env, &contract_id);
+    let (usdc_token, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &contract_id, 100);
+    client.init(&owner, &usdc_token, &Some(100), &Some(50), &None, &None);
+
+    fund_vault(&usdc_admin, &depositor, 50);
+    let usdc_client = token::Client::new(&env, &usdc_token);
+    usdc_client.approve(&depositor, &contract_id, &50, &1000);
+    let new_balance = client.deposit(&depositor, &50);
+    assert_eq!(new_balance, 150);
+}
+
+#[test]
+fn double_init_fails() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let contract_id = env.register(CalloraVault {}, ());
+    let client = CalloraVaultClient::new(&env, &contract_id);
+    let (usdc_token, _, usdc_admin) = create_usdc(&env, &owner);
 
     let owner = Address::generate(&env);
     let new_owner = Address::generate(&env);

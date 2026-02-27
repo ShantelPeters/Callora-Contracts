@@ -20,7 +20,8 @@ impl RevenuePool {
     /// * `usdc_token` – Stellar USDC (or wrapped USDC) token contract address.
     pub fn init(env: Env, admin: Address, usdc_token: Address) {
         admin.require_auth();
-        if env.storage().instance().has(&Symbol::new(&env, ADMIN_KEY)) {
+        let inst = env.storage().instance();
+        if inst.has(&Symbol::new(&env, ADMIN_KEY)) {
             panic!("revenue pool already initialized");
         }
         let inst = env.storage().instance();
@@ -36,7 +37,7 @@ impl RevenuePool {
         env.storage()
             .instance()
             .get(&Symbol::new(&env, ADMIN_KEY))
-            .unwrap_or_else(|| panic!("revenue pool not initialized"))
+            .expect("revenue pool not initialized")
     }
 
     /// Replace the current admin. Only the existing admin may call this.
@@ -156,7 +157,7 @@ impl RevenuePool {
             .storage()
             .instance()
             .get(&Symbol::new(&env, USDC_KEY))
-            .unwrap_or_else(|| panic!("revenue pool not initialized"));
+            .expect("revenue pool not initialized");
         let usdc = token::Client::new(&env, &usdc_address);
         usdc.balance(&env.current_contract_address())
     }

@@ -4,90 +4,46 @@
 # Generate a test coverage report for the Callora Contracts workspace using
 # cargo-tarpaulin and enforce a minimum of 95 % line coverage.
 #
-# Usage
-# -----
-#   ./scripts/coverage.sh           # run from the workspace root
+# Usage:
+#   ./scripts/coverage.sh
 #
-# First-time setup
-# ----------------
-#   The script installs cargo-tarpaulin automatically if it is not found.
-#   You only need a working Rust / Cargo toolchain (stable).
+# Prerequisites:
+#   cargo install cargo-tarpaulin
 #
-# Output
-# ------
-#   coverage/tarpaulin-report.html  – interactive per-file report
-#   coverage/cobertura.xml          – Cobertura XML (consumed by CI)
-#   Stdout summary printed at end of run
+# The script reads tarpaulin.toml for configuration (fail-under, output format,
+# timeout, etc.).
 
 set -euo pipefail
 
-# ---------------------------------------------------------------------------
-# Configuration — keep in sync with tarpaulin.toml
-# ---------------------------------------------------------------------------
-MINIMUM_COVERAGE=95
-COVERAGE_DIR="coverage"
-TARPAULIN_VERSION="0.31"   # minimum version; any newer release also works
+# ── Colours ──────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Colour
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-info()    { echo -e "  \033[1;34m[INFO]\033[0m  $*"; }
-success() { echo -e "  \033[1;32m[PASS]\033[0m  $*"; }
-error()   { echo -e "  \033[1;31m[FAIL]\033[0m  $*" >&2; }
-
-# ---------------------------------------------------------------------------
-# Make sure we run from the workspace root (directory containing Cargo.toml)
-# ---------------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${SCRIPT_DIR}/.."
-
-if [[ ! -f "Cargo.toml" ]]; then
-    error "Could not locate workspace Cargo.toml. Run this script from the repo root."
-    exit 1
+# ── Pre-flight checks ───────────────────────────────────────────────────────
+if ! command -v cargo-tarpaulin &>/dev/null; then
+  echo -e "${RED}ERROR:${NC} cargo-tarpaulin is not installed."
+  echo "       Install it with:  cargo install cargo-tarpaulin"
+  exit 1
 fi
 
-# ---------------------------------------------------------------------------
-# Install cargo-tarpaulin if missing
-# ---------------------------------------------------------------------------
-if ! cargo tarpaulin --version &>/dev/null 2>&1; then
-    info "cargo-tarpaulin not found — installing (this happens once)..."
-    cargo install cargo-tarpaulin --version "^${TARPAULIN_VERSION}" --locked
-    success "cargo-tarpaulin installed."
+TARPAULIN_VERSION=$(cargo tarpaulin --version 2>&1 || true)
+echo -e "  ${CYAN}[INFO]${NC}  Using ${TARPAULIN_VERSION}"
+echo -e "  ${CYAN}[INFO]${NC}  Running tests with coverage instrumentation..."
+
+# ── Run tarpaulin ────────────────────────────────────────────────────────────
+# All flags come from tarpaulin.toml at the workspace root.
+cargo tarpaulin
+
+STATUS=$?
+
+if [ $STATUS -eq 0 ]; then
+  echo ""
+  echo -e "  ${GREEN}[OK]${NC}  Coverage threshold met."
 else
-    INSTALLED=$(cargo tarpaulin --version 2>&1 | head -1)
-    info "Using ${INSTALLED}"
+  echo ""
+  echo -e "  ${RED}[FAIL]${NC}  Coverage below threshold — see report above."
 fi
 
-# ---------------------------------------------------------------------------
-# Prepare output directory
-# ---------------------------------------------------------------------------
-mkdir -p "${COVERAGE_DIR}"
-
-# ---------------------------------------------------------------------------
-# Run coverage
-# tarpaulin.toml in the workspace root carries the full configuration;
-# flags below match it so the script can also be run without the config file.
-# ---------------------------------------------------------------------------
-info "Running tests with coverage instrumentation..."
-echo ""
-
-cargo tarpaulin \
-    --config tarpaulin.toml
-
-echo ""
-
-# ---------------------------------------------------------------------------
-# Friendly reminder of where to find the reports
-# ---------------------------------------------------------------------------
-success "Coverage run complete."
-echo ""
-echo "  Reports written to ./${COVERAGE_DIR}/"
-echo "    HTML  →  ./${COVERAGE_DIR}/tarpaulin-report.html"
-echo "    XML   →  ./${COVERAGE_DIR}/cobertura.xml"
-echo ""
-echo "  Open the HTML report in a browser:"
-echo "    xdg-open ./${COVERAGE_DIR}/tarpaulin-report.html  # Linux"
-echo "    open     ./${COVERAGE_DIR}/tarpaulin-report.html  # macOS"
-echo ""
-echo "  Minimum enforced: ${MINIMUM_COVERAGE}%"
-echo "  (non-zero exit from tarpaulin means coverage fell below the threshold)"
+exit $STATUS
