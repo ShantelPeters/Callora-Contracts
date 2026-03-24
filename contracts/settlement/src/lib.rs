@@ -1,6 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, i128, Address, Env, Map, Symbol, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec};
 
 /// Developer balance record in settlement contract
 #[contracttype]
@@ -137,9 +137,9 @@ impl CalloraSettlement {
                 .get(&Symbol::new(&env, DEVELOPER_BALANCES_KEY))
                 .unwrap_or_else(|| Map::new(&env));
 
-            let current_balance = balances.get(dev_address).unwrap_or(0);
+            let current_balance = balances.get(dev_address.clone()).unwrap_or(0);
             let new_balance = current_balance + amount;
-            balances.set(dev_address, new_balance);
+            balances.set(dev_address.clone(), new_balance);
 
             env.storage()
                 .instance()

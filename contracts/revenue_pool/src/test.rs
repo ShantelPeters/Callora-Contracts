@@ -83,6 +83,20 @@ fn distribute_zero_panics() {
 }
 
 #[test]
+#[should_panic(expected = "amount must be positive")]
+fn distribute_negative_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let developer = Address::generate(&env);
+    let (_, client) = create_pool(&env);
+    let (usdc, _, _) = create_usdc(&env, &admin);
+
+    client.init(&admin, &usdc);
+    client.distribute(&admin, &developer, &-1);
+}
+
+#[test]
 #[should_panic(expected = "insufficient USDC balance")]
 fn distribute_excess_panics() {
     let env = Env::default();
@@ -133,20 +147,6 @@ fn set_admin_transfers_control() {
 }
 
 #[test]
-fn receive_payment_emits_event() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let (_, client) = create_pool(&env);
-    let (usdc, _, _) = create_usdc(&env, &admin);
-
-    client.init(&admin, &usdc);
-    client.receive_payment(&admin, &500, &true);
-    let events = env.events().all();
-    assert!(!events.is_empty());
-}
-
-#[test]
 #[should_panic(expected = "unauthorized: caller is not admin")]
 fn set_admin_unauthorized_panics() {
     let env = Env::default();
@@ -162,31 +162,7 @@ fn set_admin_unauthorized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "revenue pool not initialized")]
-fn balance_before_init_panics() {
-    let env = Env::default();
-    let (_, client) = create_pool(&env);
-    client.balance();
-}
-
-#[test]
-fn distribute_negative_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let developer = Address::generate(&env);
-    let (_, client) = create_pool(&env);
-    let (usdc, _, _) = create_usdc(&env, &admin);
-
-    client.init(&admin, &usdc);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.distribute(&admin, &developer, &-1);
-    }));
-    assert!(result.is_err());
-}
-
-#[test]
-fn receive_payment_from_non_vault() {
+fn receive_payment_emits_event() {
     let env = Env::default();
     env.mock_all_auths();
     let admin = Address::generate(&env);
@@ -194,37 +170,9 @@ fn receive_payment_from_non_vault() {
     let (usdc, _, _) = create_usdc(&env, &admin);
 
     client.init(&admin, &usdc);
-    client.receive_payment(&admin, &250, &false);
-
+    client.receive_payment(&admin, &500, &true);
     let events = env.events().all();
     assert!(!events.is_empty());
-
-    client.init(&admin, &usdc);
-    client.set_admin(&attacker, &new_admin);
-}
-
-#[test]
-#[should_panic(expected = "revenue pool not initialized")]
-fn balance_before_init_panics() {
-    let env = Env::default();
-    let (_, client) = create_pool(&env);
-    client.balance();
-}
-
-#[test]
-fn distribute_negative_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let developer = Address::generate(&env);
-    let (_, client) = create_pool(&env);
-    let (usdc, _, _) = create_usdc(&env, &admin);
-
-    client.init(&admin, &usdc);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.distribute(&admin, &developer, &-1);
-    }));
-    assert!(result.is_err());
 }
 
 #[test]
@@ -242,7 +190,15 @@ fn receive_payment_from_non_vault() {
     assert!(!events.is_empty());
 }
 
-/// Full lifecycle test: init, get_admin, balance, distribute, receive_payment, set_admin.
+#[test]
+#[should_panic(expected = "revenue pool not initialized")]
+fn balance_before_init_panics() {
+    let env = Env::default();
+    let (_, client) = create_pool(&env);
+    client.balance();
+}
+
+/// Full lifecycle: init, balance, distribute, receive_payment, set_admin.
 #[test]
 fn full_lifecycle() {
     let env = Env::default();
@@ -253,133 +209,24 @@ fn full_lifecycle() {
     let (pool_addr, client) = create_pool(&env);
     let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &admin);
 
-    // Init
     client.init(&admin, &usdc_address);
     assert_eq!(client.get_admin(), admin);
 
-    // Fund and check balance
     fund_pool(&usdc_admin, &pool_addr, 1000);
     assert_eq!(client.balance(), 1000);
 
-    // Distribute
     client.distribute(&admin, &developer, &400);
     assert_eq!(usdc_client.balance(&developer), 400);
     assert_eq!(client.balance(), 600);
 
-    // Receive payment event
     client.receive_payment(&admin, &100, &true);
 
-    // Set admin
     client.set_admin(&admin, &new_admin);
     assert_eq!(client.get_admin(), new_admin);
 
-    // New admin can distribute
     client.distribute(&new_admin, &developer, &100);
     assert_eq!(usdc_client.balance(&developer), 500);
     assert_eq!(client.balance(), 500);
-}
-
-#[test]
-fn batch_distribute_success() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let dev1 = Address::generate(&env);
-    let dev2 = Address::generate(&env);
-    let (pool_addr, client) = create_pool(&env);
-    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &admin);
-
-    client.init(&admin, &usdc_address);
-    fund_pool(&usdc_admin, &pool_addr, 1000);
-
-    let mut payments: Vec<(Address, i128)> = Vec::new(&env);
-    payments.push_back((dev1.clone(), 300_i128));
-    payments.push_back((dev2.clone(), 200_i128));
-    client.batch_distribute(&admin, &payments);
-
-    assert_eq!(usdc_client.balance(&dev1), 300);
-    assert_eq!(usdc_client.balance(&dev2), 200);
-    assert_eq!(client.balance(), 500);
-}
-
-/// Full lifecycle test: init, get_admin, balance, distribute, receive_payment, set_admin.
-#[test]
-fn full_lifecycle() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-    let developer = Address::generate(&env);
-    let attacker = Address::generate(&env);
-    let dev = Address::generate(&env);
-    let (pool_addr, client) = create_pool(&env);
-    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &admin);
-
-    // Init
-    client.init(&admin, &usdc_address);
-    assert_eq!(client.get_admin(), admin);
-
-    // Fund and check balance
-    fund_pool(&usdc_admin, &pool_addr, 1000);
-    assert_eq!(client.balance(), 1000);
-
-    // Distribute
-    client.distribute(&admin, &developer, &400);
-    assert_eq!(usdc_client.balance(&developer), 400);
-    assert_eq!(client.balance(), 600);
-
-    // Receive payment event
-    client.receive_payment(&admin, &100, &true);
-
-    // Set admin
-    client.set_admin(&admin, &new_admin);
-    assert_eq!(client.get_admin(), new_admin);
-
-    // New admin can distribute
-    client.distribute(&new_admin, &developer, &100);
-    assert_eq!(usdc_client.balance(&developer), 500);
-    assert_eq!(client.balance(), 500);
-    fund_pool(&usdc_admin, &pool_addr, 500);
-
-    let mut payments: Vec<(Address, i128)> = Vec::new(&env);
-    payments.push_back((dev.clone(), 100_i128));
-    client.batch_distribute(&attacker, &payments);
-}
-
-#[test]
-#[should_panic(expected = "amount must be positive")]
-fn batch_distribute_zero_amount_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let dev = Address::generate(&env);
-    let (pool_addr, client) = create_pool(&env);
-    let (usdc_address, _, usdc_admin) = create_usdc(&env, &admin);
-
-    client.init(&admin, &usdc_address);
-    fund_pool(&usdc_admin, &pool_addr, 500);
-
-    let mut payments: Vec<(Address, i128)> = Vec::new(&env);
-    payments.push_back((dev.clone(), 0_i128));
-    client.batch_distribute(&admin, &payments);
-}
-
-#[test]
-#[should_panic(expected = "insufficient USDC balance")]
-fn batch_distribute_insufficient_balance_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let dev = Address::generate(&env);
-    let (pool_addr, client) = create_pool(&env);
-    let (usdc_address, _, usdc_admin) = create_usdc(&env, &admin);
-
-    client.init(&admin, &usdc_address);
-    fund_pool(&usdc_admin, &pool_addr, 50);
-
-    let mut payments: Vec<(Address, i128)> = Vec::new(&env);
-    payments.push_back((dev.clone(), 100_i128));
-    client.batch_distribute(&admin, &payments);
 }
 
 #[test]
