@@ -3,7 +3,8 @@ mod settlement_tests {
     extern crate std;
 
     use crate::{CalloraSettlement, CalloraSettlementClient};
-    use soroban_sdk::{testutils::Address as _, Address, Env};
+    use soroban_sdk::testutils::{Address as _, Ledger as _};
+    use soroban_sdk::{Address, Env};
     use std::any::Any;
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -33,8 +34,10 @@ mod settlement_tests {
     fn test_settlement_initialization() {
         let env = Env::default();
         env.mock_all_auths();
+        env.ledger().set_timestamp(1_700_000_000);
         let admin = Address::generate(&env);
         let vault = Address::generate(&env);
+        let developer = Address::generate(&env);
         let addr = env.register(CalloraSettlement, ());
         let client = CalloraSettlementClient::new(&env, &addr);
 
@@ -45,6 +48,11 @@ mod settlement_tests {
 
         let global_pool = client.get_global_pool();
         assert_eq!(global_pool.total_balance, 0);
+        assert_eq!(global_pool.last_updated, 1_700_000_000);
+
+        let all_balances = client.get_all_developer_balances();
+        assert_eq!(all_balances.len(), 0);
+        assert_eq!(client.get_developer_balance(&developer), 0);
     }
 
     #[test]
@@ -83,6 +91,35 @@ mod settlement_tests {
 
         let global_pool = client.get_global_pool();
         assert_eq!(global_pool.total_balance, 0);
+    }
+
+    #[test]
+    fn test_get_developer_balance_when_empty() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let vault = Address::generate(&env);
+        let developer = Address::generate(&env);
+        let addr = env.register(CalloraSettlement, ());
+        let client = CalloraSettlementClient::new(&env, &addr);
+        client.init(&admin, &vault);
+
+        let balance = client.get_developer_balance(&developer);
+        assert_eq!(balance, 0);
+    }
+
+    #[test]
+    fn test_get_all_developer_balances_when_empty() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let vault = Address::generate(&env);
+        let addr = env.register(CalloraSettlement, ());
+        let client = CalloraSettlementClient::new(&env, &addr);
+        client.init(&admin, &vault);
+
+        let all = client.get_all_developer_balances();
+        assert_eq!(all.len(), 0);
     }
 
     #[test]

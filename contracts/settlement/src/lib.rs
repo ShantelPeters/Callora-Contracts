@@ -37,9 +37,13 @@ pub struct BalanceCreditedEvent {
     pub new_balance: i128,
 }
 
+/// Storage key for the registered vault address.
 const VAULT_KEY: &str = "vault";
+/// Storage key for the admin address.
 const ADMIN_KEY: &str = "admin";
+/// Storage key for the developer balances map.
 const DEVELOPER_BALANCES_KEY: &str = "developer_balances";
+/// Storage key for the global pool state.
 const GLOBAL_POOL_KEY: &str = "global_pool";
 
 #[contract]
@@ -47,7 +51,13 @@ pub struct CalloraSettlement;
 
 #[contractimpl]
 impl CalloraSettlement {
-    /// Initialize the settlement contract with admin and vault address
+    /// Initialize the settlement contract with admin and vault address.
+    ///
+    /// Persists admin + registered vault, initializes an empty developer balance map,
+    /// and stores a timestamped global pool.
+    ///
+    /// # Panics
+    /// Panics if the contract is already initialized.
     pub fn init(env: Env, admin: Address, vault_address: Address) {
         let inst = env.storage().instance();
         if inst.has(&Symbol::new(&env, ADMIN_KEY)) {
