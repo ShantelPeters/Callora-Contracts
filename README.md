@@ -181,6 +181,7 @@ callora-contracts/
 - [Core Contracts](contracts/README.md)
 - [Vault Access Control Model](contracts/vault/ACCESS_CONTROL.md)
 - [Security Audit Notes](docs/SECURITY.md)
+- [Auditor Onboarding Bundle](docs/AUDIT_BUNDLE.md) - Complete guide for security auditors
 
 ## 🔐 Security
 
