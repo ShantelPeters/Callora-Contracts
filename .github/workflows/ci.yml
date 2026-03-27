@@ -60,15 +60,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build WASM
-        run: |
-          cd contracts/vault
-          cargo build --target wasm32-unknown-unknown --release
-          cd ../revenue_pool
-          cargo build --target wasm32-unknown-unknown --release
-          cd ../settlement
-          cargo build --target wasm32-unknown-unknown --release
-
       - name: Check WASM size
         run: |
           chmod +x scripts/check-wasm-size.sh
