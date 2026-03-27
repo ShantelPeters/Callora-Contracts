@@ -409,10 +409,25 @@ impl CalloraVault {
         meta.balance
     }
 
-    /// Deducts multiple amounts of USDC from the vault for different requests.
-    /// Can be called by the Owner or the Authorized Caller.
+    /// Atomically deducts multiple amounts from the vault.
+    ///
+    /// The entire batch is validated before any state is written. If any item
+    /// fails validation the call panics and no balance change occurs.
+    ///
+    /// # Panics
+    /// * `"batch too large"` – more than `MAX_BATCH_SIZE` items.
+    /// * `"batch_deduct requires at least one item"` – empty batch.
+    /// * `"unauthorized caller"` – caller is not owner or authorized_caller.
+    /// * `"amount must be positive"` – any item amount ≤ 0.
+    /// * `"deduct amount exceeds max_deduct"` – any item exceeds the per-item cap.
+    /// * `"insufficient balance"` – cumulative deductions exceed current balance.
     pub fn batch_deduct(env: Env, caller: Address, items: Vec<DeductItem>) -> i128 {
         caller.require_auth();
+
+        let n = items.len();
+        assert!(n > 0, "batch_deduct requires at least one item");
+        assert!(n <= MAX_BATCH_SIZE, "batch too large");
+
         let max_deduct = Self::get_max_deduct(env.clone());
         let mut meta = Self::get_meta(env.clone());
 
@@ -422,9 +437,7 @@ impl CalloraVault {
         };
         assert!(authorized, "unauthorized caller");
 
-        let n = items.len();
-        assert!(n > 0, "batch_deduct requires at least one item");
-
+        // ── Phase 1: validate the full batch, compute totals ────────────────
         let mut running = meta.balance;
         let mut total_amount: i128 = 0;
         for item in items.iter() {
@@ -435,23 +448,27 @@ impl CalloraVault {
             );
             assert!(running >= item.amount, "insufficient balance");
             running = running.checked_sub(item.amount).unwrap();
-            total_amount = total_amount
-                .checked_add(item.amount)
-                .unwrap_or_else(|| panic!("total overflow"));
+            total_amount = total_amount.checked_add(item.amount).unwrap();
         }
-        // Apply deductions and emit per-item events.
-        let mut balance = meta.balance;
+
+        // ── Phase 2: write state ─────────────────────────────────────────────
+        meta.balance = running;
+        env.storage().instance().set(&StorageKey::Meta, &meta);
+
+        // ── Phase 3: emit one event per item ─────────────────────────────────
+        // Walk from original balance down so each event shows the running total
+        // after that item — same semantics as single deduct events.
+        let mut event_balance = meta.balance.checked_add(total_amount).unwrap();
         for item in items.iter() {
-            balance = balance.checked_sub(item.amount).unwrap();
+            event_balance = event_balance.checked_sub(item.amount).unwrap();
             let rid = item.request_id.clone().unwrap_or(Symbol::new(&env, ""));
             env.events().publish(
                 (Symbol::new(&env, "deduct"), caller.clone(), rid),
-                (item.amount, balance),
+                (item.amount, event_balance),
             );
         }
-        meta.balance = balance;
-        env.storage().instance().set(&StorageKey::Meta, &meta);
 
+        // ── Phase 4: external transfer ───────────────────────────────────────
         let inst = env.storage().instance();
         if let Some(settlement) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
             let usdc_token: Address = inst.get(&StorageKey::UsdcToken).unwrap();

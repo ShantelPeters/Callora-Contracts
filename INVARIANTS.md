@@ -94,28 +94,22 @@ Helper and view functions such as `get_meta`, `get_max_deduct`, `get_revenue_poo
 
 ### `batch_deduct`
 
-**Effect on balance**  
-- For each `DeductItem { amount, .. }`, decreases `VaultMeta.balance` by `amount`, applied in sequence.
+**Effect on balance**
 - Total change: `balance' = balance - sum_i(amount_i)`.
 
 **Pre-conditions**
-- Caller is authorized:
-  - `caller.require_auth()`
+- Caller is authorized: `caller.require_auth()`
 - Vault is initialized.
-- Items constraints:
-  - `items.len() > 0`
-  - For every item:
-    - `item.amount > 0`
-    - `item.amount <= get_max_deduct(env)`
-- Sufficient balance across the entire batch:
-  - The loop uses a `running` variable and asserts `running >= item.amount` before each subtraction.
-  - This ensures that the **cumulative** deductions never drive the interim balance negative.
+- `1 <= items.len() <= MAX_BATCH_SIZE` (50)
+- For every item: `item.amount > 0` and `item.amount <= get_max_deduct(env)`
+- Cumulative deductions do not exceed balance:
+  - Validated in a single pass before any state is written.
 
 **Post-conditions**
-- `VaultMeta.balance' = balance - sum_i(amount_i)`
-- The running-balance checks ensure:
-  - `VaultMeta.balance' >= 0`
-- If any pre-condition fails, the entire batch reverts and the original `VaultMeta.balance` is preserved.
+- `VaultMeta.balance' = balance - sum_i(amount_i) >= 0`
+- If **any** pre-condition fails, the call panics before storage is written —
+  no partial balance update is possible.
+- One `deduct` event is emitted per item, **only on success**, after state is written.
 
 ---
 

@@ -882,6 +882,58 @@ fn batch_deduct_zero_amount_fails() {
     assert!(result.is_err(), "expected error for zero amount item");
 }
 
+#[test]
+fn batch_deduct_too_large_fails() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 10_000);
+    client.init(&owner, &usdc, &Some(10_000), &None, &None, &None, &None);
+
+    // Build a batch of MAX_BATCH_SIZE + 1 items
+    let mut items = soroban_sdk::Vec::new(&env);
+    for _ in 0..=crate::MAX_BATCH_SIZE {
+        items.push_back(DeductItem {
+            amount: 1,
+            request_id: None,
+        });
+    }
+    let result = client.try_batch_deduct(&owner, &items);
+    assert!(result.is_err(), "expected error for oversized batch");
+}
+
+#[test]
+fn batch_deduct_fail_mid_batch_leaves_balance_unchanged() {
+    // Second item exceeds balance — entire batch must revert.
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 60,
+            request_id: None
+        },
+        DeductItem {
+            amount: 60,
+            request_id: None
+        }, // cumulative 120 > 100
+    ];
+    let result = client.try_batch_deduct(&owner, &items);
+    assert!(result.is_err(), "expected insufficient balance error");
+    // Balance must be completely unchanged
+    assert_eq!(client.balance(), 100);
+}
+
 // ---------------------------------------------------------------------------
 // Withdraw tests
 // ---------------------------------------------------------------------------
