@@ -1409,3 +1409,284 @@ fn get_settlement_before_set_panics() {
     client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.get_settlement();
 }
+
+// ---------------------------------------------------------------------------
+// Pause / circuit-breaker tests
+// ---------------------------------------------------------------------------
+
+/// Helper: initialise a vault with 1 000 USDC balance and an authorized caller.
+fn setup_paused_vault(
+    env: &Env,
+) -> (
+    Address, // vault
+    CalloraVaultClient<'_>,
+    Address,                       // owner
+    Address,                       // authorized_caller
+    token::StellarAssetClient<'_>, // usdc_admin (for minting)
+    Address,                       // usdc token address
+) {
+    let owner = Address::generate(env);
+    let caller = Address::generate(env);
+    let (vault_address, client) = create_vault(env);
+    let (usdc, _, usdc_admin) = create_usdc(env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 1000);
+    client.init(
+        &owner,
+        &usdc,
+        &Some(1000),
+        &Some(caller.clone()),
+        &None,
+        &None,
+        &None,
+    );
+    (vault_address, client, owner, caller, usdc_admin, usdc)
+}
+
+#[test]
+fn is_paused_false_before_pause() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    assert!(!client.is_paused(), "vault should not be paused after init");
+}
+
+#[test]
+fn pause_sets_paused_flag() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    assert!(client.is_paused(), "vault should be paused");
+}
+
+#[test]
+fn unpause_clears_paused_flag() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.unpause(&owner);
+    assert!(!client.is_paused(), "vault should be unpaused");
+}
+
+#[test]
+fn pause_emits_event() {
+    let env = Env::default();
+    let (vault_address, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+
+    let events = env.events().all();
+    let ev = events
+        .into_iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "vault_paused")
+            }
+        })
+        .expect("expected vault_paused event");
+
+    let topic0: Symbol = ev.1.get(0).unwrap().into_val(&env);
+    let topic1: Address = ev.1.get(1).unwrap().into_val(&env);
+    assert_eq!(topic0, Symbol::new(&env, "vault_paused"));
+    assert_eq!(topic1, owner);
+}
+
+#[test]
+fn unpause_emits_event() {
+    let env = Env::default();
+    let (vault_address, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.unpause(&owner);
+
+    let events = env.events().all();
+    let ev = events
+        .into_iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "vault_unpaused")
+            }
+        })
+        .expect("expected vault_unpaused event");
+
+    let topic0: Symbol = ev.1.get(0).unwrap().into_val(&env);
+    let topic1: Address = ev.1.get(1).unwrap().into_val(&env);
+    assert_eq!(topic0, Symbol::new(&env, "vault_unpaused"));
+    assert_eq!(topic1, owner);
+}
+
+#[test]
+#[should_panic(expected = "vault is paused")]
+fn pause_blocks_deposit() {
+    let env = Env::default();
+    let (vault_address, client, owner, _, usdc_admin, usdc) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+
+    usdc_admin.mint(&owner, &100);
+    let usdc_client = token::Client::new(&env, &usdc);
+    usdc_client.approve(&owner, &vault_address, &100, &1000);
+    client.deposit(&owner, &100);
+}
+
+#[test]
+#[should_panic(expected = "vault is paused")]
+fn pause_blocks_deduct() {
+    let env = Env::default();
+    let (_, client, owner, caller, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.deduct(&caller, &50, &None);
+}
+
+#[test]
+#[should_panic(expected = "vault is paused")]
+fn pause_blocks_batch_deduct() {
+    let env = Env::default();
+    let (_, client, owner, caller, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 50,
+            request_id: None
+        }
+    ];
+    client.batch_deduct(&caller, &items);
+}
+
+#[test]
+fn pause_allows_withdraw() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    // withdraw must succeed even while paused
+    let remaining = client.withdraw(&200);
+    assert_eq!(remaining, 800);
+    assert!(client.is_paused(), "vault should still be paused");
+}
+
+#[test]
+fn pause_allows_withdraw_to() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+    let recipient = Address::generate(&env);
+
+    client.pause(&owner);
+    let remaining = client.withdraw_to(&recipient, &100);
+    assert_eq!(remaining, 900);
+    assert!(client.is_paused());
+}
+
+#[test]
+fn unpause_restores_deposit() {
+    let env = Env::default();
+    let (vault_address, client, owner, _, usdc_admin, usdc) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.unpause(&owner);
+
+    usdc_admin.mint(&owner, &50);
+    let usdc_client = token::Client::new(&env, &usdc);
+    usdc_client.approve(&owner, &vault_address, &50, &1000);
+    let new_balance = client.deposit(&owner, &50);
+    assert_eq!(new_balance, 1050);
+}
+
+#[test]
+fn unpause_restores_deduct() {
+    let env = Env::default();
+    let (_, client, owner, caller, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.unpause(&owner);
+
+    let remaining = client.deduct(&caller, &100, &None);
+    assert_eq!(remaining, 900);
+}
+
+#[test]
+fn non_owner_non_admin_cannot_pause() {
+    let env = Env::default();
+    let (_, client, _, _, _, _) = setup_paused_vault(&env);
+    let attacker = Address::generate(&env);
+
+    env.mock_all_auths(); // already set in helper; attacker auth will be mocked too
+
+    let result = client.try_pause(&attacker);
+    assert!(
+        result.is_err(),
+        "expected error when non-privileged caller pauses"
+    );
+}
+
+#[test]
+fn non_owner_non_admin_cannot_unpause() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+    let attacker = Address::generate(&env);
+
+    client.pause(&owner);
+    let result = client.try_unpause(&attacker);
+    assert!(
+        result.is_err(),
+        "expected error when non-privileged caller unpauses"
+    );
+}
+
+#[test]
+fn admin_non_owner_can_pause_and_unpause() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let separate_admin = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 500);
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
+
+    // Transfer admin role to a separate address
+    client.set_admin(&owner, &separate_admin);
+
+    // The separate admin (not owner) should be able to pause
+    client.pause(&separate_admin);
+    assert!(client.is_paused());
+
+    // And unpause
+    client.unpause(&separate_admin);
+    assert!(!client.is_paused());
+}
+
+#[test]
+#[should_panic(expected = "vault already paused")]
+fn double_pause_panics() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.pause(&owner); // should panic
+}
+
+#[test]
+#[should_panic(expected = "vault not paused")]
+fn double_unpause_panics() {
+    let env = Env::default();
+    let (_, client, owner, _, _, _) = setup_paused_vault(&env);
+
+    client.pause(&owner);
+    client.unpause(&owner);
+    client.unpause(&owner); // should panic
+}
