@@ -77,12 +77,19 @@ pub enum StorageKey {
     Metadata(String),
     PendingOwner,
     PendingAdmin,
+    Paused,
 }
 
 // Replaced by StorageKey enum variants
 
 /// Default maximum single deduct amount when not set at init (no cap).
 pub const DEFAULT_MAX_DEDUCT: i128 = i128::MAX;
+
+/// Maximum batch size for batch_deduct operations.
+pub const MAX_BATCH_SIZE: u32 = 50;
+
+/// Storage key for allowed depositors list.
+pub const ALLOWED_KEY: &str = "allowed_depositors";
 
 /// Maximum length for offering metadata (e.g. IPFS CID or URI).
 pub const MAX_METADATA_LEN: u32 = 256;
@@ -183,7 +190,7 @@ impl CalloraVault {
         let allowed: Vec<Address> = env
             .storage()
             .instance()
-            .get(&Symbol::new(&env, ALLOWED_KEY))
+            .get(&StorageKey::AllowedDepositors)
             .unwrap_or(Vec::new(&env));
         allowed.contains(&caller)
     }
@@ -422,6 +429,7 @@ impl CalloraVault {
         let usdc = token::Client::new(&env, &usdc_address);
         usdc.transfer(&caller, &env.current_contract_address(), &amount);
 
+        let mut meta = Self::get_meta(env.clone());
         meta.balance = meta
             .balance
             .checked_add(amount)
@@ -451,9 +459,9 @@ impl CalloraVault {
         assert!(amount > 0, "amount must be positive");
         let max_deduct = Self::get_max_deduct(env.clone());
         assert!(amount <= max_deduct, "deduct amount exceeds max_deduct");
-        let mut meta = Self::get_meta(env.clone());
 
         // Check authorization: must be either the authorized_caller if set, or the owner.
+        let meta = Self::get_meta(env.clone());
         let authorized = match &meta.authorized_caller {
             Some(auth_caller) => caller == *auth_caller || caller == meta.owner,
             None => caller == meta.owner,
@@ -461,6 +469,7 @@ impl CalloraVault {
         assert!(authorized, "unauthorized caller");
 
         assert!(meta.balance >= amount, "insufficient balance");
+        let mut meta = Self::get_meta(env.clone());
         meta.balance = meta.balance.checked_sub(amount).unwrap();
         env.storage().instance().set(&StorageKey::Meta, &meta);
         let inst = env.storage().instance();
@@ -567,7 +576,7 @@ impl CalloraVault {
     /// The nominee must call `accept_ownership` to finalize the transfer.
     /// Can only be called by the current Owner.
     pub fn transfer_ownership(env: Env, new_owner: Address) {
-        let mut meta = Self::get_meta(env.clone());
+        let meta = Self::get_meta(env.clone());
         meta.owner.require_auth();
         assert!(
             new_owner != meta.owner,
