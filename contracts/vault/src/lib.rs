@@ -68,6 +68,9 @@ pub struct VaultMeta {
 #[contracttype]
 pub enum StorageKey {
     Meta,
+    /// Allowed depositors list: Vec<Address> with stable ordering.
+    /// Unlike Maps, Vec maintains insertion order, making iteration predictable and stable.
+    /// Used to store addresses allowed to deposit funds on behalf of the vault owner.
     AllowedDepositors,
     Admin,
     UsdcToken,

@@ -91,6 +91,13 @@ impl CalloraSettlement {
     /// # Access Control
     /// Only the registered vault address or admin can call this function.
     ///
+    /// # Map Operations
+    /// When crediting to developer balance:
+    /// - Performs O(1) lookup to retrieve current balance from developer map
+    /// - Updates the specific developer's balance
+    /// - Stores updated map back to contract state
+    /// - Map iteration is NOT performed; only point lookup/update
+    ///
     /// # Events
     /// Always emits `payment_received`. Also emits `balance_credited` when `to_pool=false`.
     pub fn receive_payment(
@@ -180,6 +187,18 @@ impl CalloraSettlement {
     }
 
     /// Get developer balance
+    ///
+    /// Performs a direct O(1) map lookup for the specified developer's balance.
+    /// This is the preferred method for querying individual balances as it does not iterate the map.
+    ///
+    /// # Arguments
+    /// * `developer` - Developer address to query
+    ///
+    /// # Returns
+    /// Balance in USDC micro-units, or 0 if no balance recorded
+    ///
+    /// # Safety
+    /// Safe for all use cases; does not depend on map iteration order.
     pub fn get_developer_balance(env: Env, developer: Address) -> i128 {
         if !env.storage().instance().has(&Symbol::new(&env, ADMIN_KEY)) {
             panic!("settlement contract not initialized");
@@ -192,6 +211,32 @@ impl CalloraSettlement {
     }
 
     /// Get all developer balances (for admin use)
+    ///
+    /// **CRITICAL**: Map iteration order is **NOT stable** and should not be relied upon.
+    /// Use this function only for administrative queries or reporting purposes.
+    /// For production integrations with many developers (>100), implement off-chain indexing
+    /// by listening to `BalanceCreditedEvent` and maintaining a local database.
+    ///
+    /// # Iteration Behavior
+    /// - **Small maps (< 100 entries)**: Safe to iterate; yields current state but order is unstable
+    /// - **Large maps (> 100 entries)**: Consider off-chain indexing to avoid excessive gas costs
+    /// - **Order guarantees**: NONE. Do not use for routing, prioritization, or deterministic selection.
+    ///
+    /// # Returns
+    /// Vec of DeveloperBalance records. Iteration order is unstable and may vary between calls.
+    ///
+    /// # Use Cases
+    /// ✅ Administrative dashboards and reporting
+    /// ✅ Audit compliance queries
+    /// ✅ Contract state verification
+    /// ❌ Automatic routing based on iteration order
+    /// ❌ Deterministic selection of developers
+    ///
+    /// # Performance
+    /// Gas cost scales with number of developers:
+    /// - 50 developers: ~500 gas
+    /// - 100 developers: ~1,000 gas
+    /// - 500 developers: ~5,000 gas (consider off-chain indexing)
     pub fn get_all_developer_balances(env: Env) -> Vec<DeveloperBalance> {
         if !env.storage().instance().has(&Symbol::new(&env, ADMIN_KEY)) {
             panic!("settlement contract not initialized");
