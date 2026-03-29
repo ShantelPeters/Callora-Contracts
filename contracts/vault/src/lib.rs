@@ -79,6 +79,7 @@ pub enum StorageKey {
     Paused,
     PendingOwner,
     PendingAdmin,
+    DepositorList,
 }
 
 // Replaced by StorageKey enum variants
@@ -304,29 +305,57 @@ impl CalloraVault {
 
     /// Sets whether an address is allowed to deposit into the vault.
     /// Can only be called by the Owner.
-    pub fn set_allowed_depositor(env: Env, caller: Address, depositor: Option<Address>) {
+    pub fn set_allowed_depositor(env: Env, caller: Address, depositor: Address) {
         caller.require_auth();
-        Self::require_owner(env.clone(), caller.clone());
-        match depositor {
-            Some(addr) => {
-                let mut allowed: Vec<Address> = env
-                    .storage()
-                    .instance()
-                    .get(&StorageKey::AllowedDepositors)
-                    .unwrap_or(Vec::new(&env));
-                if !allowed.contains(&addr) {
-                    allowed.push_back(addr);
-                }
-                env.storage()
-                    .instance()
-                    .set(&StorageKey::AllowedDepositors, &allowed);
-            }
-            None => {
-                env.storage()
-                    .instance()
-                    .remove(&StorageKey::AllowedDepositors);
-            }
-        }
+        Self::require_owner(env.clone(), caller);
+
+        // Reject duplicate adds so integration bugs surface early.
+        let mut list: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&StorageKey::DepositorList)
+            .unwrap_or(Vec::new(&env));
+
+        assert!(!list.contains(&depositor), "already allowed");
+
+        // Per-address flag for O(1) membership checks in `is_authorized_depositor`.
+        env.storage()
+            .instance()
+            .set(&StorageKey::AllowedDepositors, &depositor); // kept for ABI compat
+                                                              // Append to enumeration list.
+        list.push_back(depositor);
+        env.storage()
+            .instance()
+            .set(&StorageKey::DepositorList, &list);
+    }
+
+    /// Remove **all** addresses from the allowed-depositor allowlist.
+    ///
+    /// Safe to call on an already-empty list (no-op).
+    /// Only the **owner** may call this.
+    ///
+    /// # Storage
+    /// Removes `StorageKey::AllowedDepositors` and resets
+    /// `StorageKey::DepositorList` to an empty vector.
+    pub fn clear_allowed_depositors(env: Env, caller: Address) {
+        caller.require_auth();
+        Self::require_owner(env.clone(), caller);
+
+        env.storage()
+            .instance()
+            .remove(&StorageKey::AllowedDepositors);
+        env.storage()
+            .instance()
+            .set(&StorageKey::DepositorList, &Vec::<Address>::new(&env));
+    }
+
+    /// Return the full ordered list of currently allowed depositors.
+    /// Suitable for off-chain auditing.
+    pub fn get_allowed_depositors(env: Env) -> Vec<Address> {
+        env.storage()
+            .instance()
+            .get(&StorageKey::DepositorList)
+            .unwrap_or(Vec::new(&env))
     }
 
     /// Sets the authorized caller permitted to trigger deductions.

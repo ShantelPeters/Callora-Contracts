@@ -2051,3 +2051,96 @@ fn withdraw_to_zero_succeeds() {
 
     assert_eq!(client.withdraw(&300), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #108 — set_allowed_depositor: duplicate add, clear, unauthorized
+// ---------------------------------------------------------------------------
+
+#[test]
+fn set_allowed_depositor_duplicate_add_is_rejected() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    client.set_allowed_depositor(&owner, &depositor);
+    let result = client.try_set_allowed_depositor(&owner, &depositor);
+    assert!(result.is_err(), "duplicate add must be rejected");
+}
+
+#[test]
+fn clear_allowed_depositors_removes_all() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let d1 = Address::generate(&env);
+    let d2 = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    client.set_allowed_depositor(&owner, &d1);
+    client.set_allowed_depositor(&owner, &d2);
+    client.clear_allowed_depositors(&owner);
+
+    // Neither address should be able to deposit after clear.
+    usdc_admin.mint(&d1, &10);
+    usdc_client.approve(&d1, &vault_address, &10, &1000);
+    assert!(client.try_deposit(&d1, &10).is_err());
+}
+
+#[test]
+fn clear_allowed_depositors_on_empty_is_noop() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    // Must not panic on empty list.
+    client.clear_allowed_depositors(&owner);
+    assert_eq!(client.get_allowed_depositors().len(), 0);
+}
+
+#[test]
+fn non_owner_cannot_set_allowed_depositor_issue108() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    let result = client.try_set_allowed_depositor(&attacker, &depositor);
+    assert!(result.is_err(), "non-owner must not mutate allowlist");
+}
+
+#[test]
+fn non_owner_cannot_clear_allowed_depositors() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    client.set_allowed_depositor(&owner, &depositor);
+    let result = client.try_clear_allowed_depositors(&attacker);
+    assert!(result.is_err(), "non-owner must not clear allowlist");
+}
