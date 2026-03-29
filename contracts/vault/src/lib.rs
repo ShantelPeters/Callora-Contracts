@@ -292,6 +292,10 @@ impl CalloraVault {
         meta.balance
     }
 
+    /// Returns the configured maximum amount allowed per single deduct call.
+    ///
+    /// If no `max_deduct` was set at `init`, returns [`DEFAULT_MAX_DEDUCT`] (effectively no cap).
+    /// This value is stored under [`StorageKey::MaxDeduct`] and is immutable after initialization.
     pub fn get_max_deduct(env: Env) -> i128 {
         env.storage()
             .instance()
@@ -299,27 +303,94 @@ impl CalloraVault {
             .unwrap_or(DEFAULT_MAX_DEDUCT)
     }
 
-    /// Deducts USDC from the vault for settlement or revenue pool.
-    /// Can be called by the Owner or the Authorized Caller.
+    /// Deducts `amount` of USDC from the vault's internal balance in a single atomic call.
+    ///
+    /// ## Validation (fail-fast, in order)
+    /// 1. `amount > 0` — zero or negative amounts are rejected immediately.
+    /// 2. `amount <= max_deduct` — enforces the per-call cap configured at `init`.
+    /// 3. Authorization — `caller` must be the vault owner **or** the `authorized_caller`
+    ///    stored in [`VaultMeta`]. See [Authorization Model](#authorization-model) below.
+    /// 4. `balance >= amount` — prevents negative balances; uses an explicit guard so
+    ///    the subtraction is always safe (workspace also has `overflow-checks = true`).
+    ///
+    /// ## Authorization Model
+    ///
+    /// The check is deterministic and based solely on stored state — no implicit trust:
+    /// - If `VaultMeta.authorized_caller` is `Some(addr)`, the caller must equal `addr`
+    ///   **or** the vault owner.
+    /// - If `VaultMeta.authorized_caller` is `None`, only the vault owner may call.
+    ///
+    /// In production the `authorized_caller` is typically a backend service address set
+    /// at `init` (or via `set_authorized_caller`). The owner retains the ability to deduct
+    /// directly at all times.
+    ///
+    /// ## max_deduct Behavior
+    ///
+    /// `max_deduct` caps the amount that can be deducted in a single call. It is stored
+    /// under [`StorageKey::MaxDeduct`] and defaults to [`DEFAULT_MAX_DEDUCT`] (i128::MAX,
+    /// i.e. no cap) when not provided at `init`. Passing `max_deduct = Some(n)` at `init`
+    /// enforces that every future `deduct` call satisfies `amount <= n`.
+    ///
+    /// ## Atomicity
+    ///
+    /// All validation runs before any state mutation. If any assertion fails the
+    /// transaction is aborted and **no storage is written**. The USDC transfer (if a
+    /// revenue pool or settlement address is configured) happens **after** the internal
+    /// balance is updated; a transfer failure will revert the entire transaction including
+    /// the balance write.
+    ///
+    /// ## Arguments
+    /// * `caller`     – Address invoking the deduction; must be authorized (see above).
+    /// * `amount`     – Amount to deduct in USDC base units (must be > 0 and ≤ max_deduct).
+    /// * `request_id` – Optional idempotency / tracking symbol emitted in the event.
+    ///
+    /// ## Returns
+    /// The vault's internal balance after the deduction.
+    ///
+    /// ## Panics
+    /// * `"amount must be positive"` — `amount <= 0`.
+    /// * `"deduct amount exceeds max_deduct"` — `amount > max_deduct`.
+    /// * `"unauthorized caller"` — caller is neither owner nor authorized_caller.
+    /// * `"insufficient balance"` — `balance < amount`.
+    ///
+    /// ## Events
+    /// Emits topic `("deduct", caller, request_id_or_empty)` with data `(amount, new_balance)`
+    /// **only** after all state mutations succeed. Schema matches [`EVENT_SCHEMA.md`].
     pub fn deduct(env: Env, caller: Address, amount: i128, request_id: Option<Symbol>) -> i128 {
+        // ── 1. Require Soroban-level auth for the caller ──────────────────────
         caller.require_auth();
+
+        // ── 2. Validate amount > 0 ────────────────────────────────────────────
         assert!(amount > 0, "amount must be positive");
+
+        // ── 3. Enforce max_deduct cap ─────────────────────────────────────────
         let max_deduct = Self::get_max_deduct(env.clone());
         assert!(amount <= max_deduct, "deduct amount exceeds max_deduct");
+
+        // ── 4. Load state (read-only until all checks pass) ───────────────────
         let mut meta = Self::get_meta(env.clone());
 
-        // Check authorization: must be either the authorized_caller if set, or the owner.
+        // ── 5. Authorization: owner OR explicitly stored authorized_caller ─────
+        //    Deterministic — no implicit trust, validated against stored address.
         let authorized = match &meta.authorized_caller {
             Some(auth_caller) => caller == *auth_caller || caller == meta.owner,
             None => caller == meta.owner,
         };
         assert!(authorized, "unauthorized caller");
 
+        // ── 6. Balance safety: explicit guard prevents underflow ──────────────
         assert!(meta.balance >= amount, "insufficient balance");
-        meta.balance -= amount;
+
+        // ── 7. Mutate state (only reached if all checks above passed) ─────────
+        meta.balance = meta
+            .balance
+            .checked_sub(amount)
+            .expect("balance underflow");
         env.storage().instance().set(&StorageKey::Meta, &meta);
 
-        // Transfer USDC to settlement contract or revenue pool if configured
+        // ── 8. Optional USDC transfer to settlement / revenue pool ────────────
+        //    Deduct from internal balance FIRST (step 7), then transfer.
+        //    If the transfer panics, the entire transaction reverts (including step 7).
         let inst = env.storage().instance();
         if let Some(settlement) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
             let usdc_token: Address = inst.get(&StorageKey::UsdcToken).unwrap();
@@ -330,15 +401,12 @@ impl CalloraVault {
             Self::transfer_funds(&env, &usdc_token, &revenue_pool, amount);
         }
 
-        let topics = match &request_id {
-            Some(rid) => (Symbol::new(&env, "deduct"), caller.clone(), rid.clone()),
-            None => (
-                Symbol::new(&env, "deduct"),
-                caller.clone(),
-                Symbol::new(&env, ""),
-            ),
-        };
-        env.events().publish(topics, (amount, meta.balance));
+        // ── 9. Emit event ONLY after successful deduction ─────────────────────
+        //    Schema: topics = ("deduct", caller, request_id | ""), data = (amount, new_balance)
+        let rid = request_id.unwrap_or(Symbol::new(&env, ""));
+        env.events()
+            .publish((Symbol::new(&env, "deduct"), caller, rid), (amount, meta.balance));
+
         meta.balance
     }
 
