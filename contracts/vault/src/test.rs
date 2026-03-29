@@ -157,7 +157,7 @@ fn get_admin_returns_owner_after_init() {
 }
 
 #[test]
-fn set_admin_updates_admin() {
+fn set_admin_two_step_succeeds() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let new_admin = Address::generate(&env);
@@ -169,6 +169,9 @@ fn set_admin_updates_admin() {
     client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.set_admin(&owner, &new_admin);
+    assert_eq!(client.get_admin(), owner); // Still old admin
+
+    client.accept_admin();
     assert_eq!(client.get_admin(), new_admin);
 }
 
@@ -353,6 +356,28 @@ fn owner_can_set_and_clear_allowed_depositor() {
 }
 
 #[test]
+fn set_allowed_depositor_duplicate_is_ignored() {
+    // Adding the same depositor twice should not create a duplicate entry
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    client.set_allowed_depositor(&owner, &Some(depositor.clone()));
+    client.set_allowed_depositor(&owner, &Some(depositor.clone())); // duplicate — should be a no-op
+
+    // depositor can still deposit exactly once (list not doubled)
+    usdc_admin.mint(&depositor, &50);
+    usdc_client.approve(&depositor, &vault_address, &50, &1000);
+    assert_eq!(client.deposit(&depositor, &50), 150);
+}
+
+#[test]
 #[should_panic(expected = "unauthorized: owner only")]
 fn non_owner_cannot_set_allowed_depositor() {
     let env = Env::default();
@@ -391,6 +416,35 @@ fn deposit_after_depositor_cleared_is_rejected() {
 // ---------------------------------------------------------------------------
 // Deduct tests
 // ---------------------------------------------------------------------------
+
+#[test]
+fn set_authorized_caller_sets_and_emits_event() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let new_caller = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &Some(200), &None, &None, &None, &None);
+
+    client.set_authorized_caller(&new_caller);
+
+    let events = env.events().all();
+    let ev = events.last().expect("expected set_auth_caller event");
+    assert_eq!(ev.1.len(), 2);
+
+    let topic0: Symbol = ev.1.get(0).unwrap().into_val(&env);
+    let topic1: Address = ev.1.get(1).unwrap().into_val(&env);
+    assert_eq!(topic0, Symbol::new(&env, "set_auth_caller"));
+    assert_eq!(topic1, owner);
+
+    let data: Address = ev.2.into_val(&env);
+    assert_eq!(data, new_caller);
+
+    let remaining = client.deduct(&new_caller, &50, &None);
+    assert_eq!(remaining, 150);
+}
 
 #[test]
 fn deduct_reduces_balance() {
@@ -828,6 +882,58 @@ fn batch_deduct_zero_amount_fails() {
     assert!(result.is_err(), "expected error for zero amount item");
 }
 
+#[test]
+fn batch_deduct_too_large_fails() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 10_000);
+    client.init(&owner, &usdc, &Some(10_000), &None, &None, &None, &None);
+
+    // Build a batch of MAX_BATCH_SIZE + 1 items
+    let mut items = soroban_sdk::Vec::new(&env);
+    for _ in 0..=crate::MAX_BATCH_SIZE {
+        items.push_back(DeductItem {
+            amount: 1,
+            request_id: None,
+        });
+    }
+    let result = client.try_batch_deduct(&owner, &items);
+    assert!(result.is_err(), "expected error for oversized batch");
+}
+
+#[test]
+fn batch_deduct_fail_mid_batch_leaves_balance_unchanged() {
+    // Second item exceeds balance — entire batch must revert.
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 60,
+            request_id: None
+        },
+        DeductItem {
+            amount: 60,
+            request_id: None
+        }, // cumulative 120 > 100
+    ];
+    let result = client.try_batch_deduct(&owner, &items);
+    assert!(result.is_err(), "expected insufficient balance error");
+    // Balance must be completely unchanged
+    assert_eq!(client.balance(), 100);
+}
+
 // ---------------------------------------------------------------------------
 // Withdraw tests
 // ---------------------------------------------------------------------------
@@ -917,7 +1023,7 @@ fn withdraw_to_insufficient_balance_fails() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn transfer_ownership_succeeds() {
+fn transfer_ownership_two_step_succeeds() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let new_owner = Address::generate(&env);
@@ -929,13 +1035,16 @@ fn transfer_ownership_succeeds() {
     client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.transfer_ownership(&new_owner);
-
     let meta = client.get_meta();
-    assert_eq!(meta.owner, new_owner);
+    assert_eq!(meta.owner, owner); // Still old owner
+
+    client.accept_ownership();
+    let meta2 = client.get_meta();
+    assert_eq!(meta2.owner, new_owner);
 }
 
 #[test]
-fn transfer_ownership_emits_event() {
+fn transfer_ownership_emits_events() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let new_owner = Address::generate(&env);
@@ -947,22 +1056,38 @@ fn transfer_ownership_emits_event() {
     client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.transfer_ownership(&new_owner);
 
-    let ev = env
-        .events()
-        .all()
-        .into_iter()
+    let events = env.events().all();
+    let nomad_ev = events
+        .iter()
         .find(|e| {
             e.0 == vault_address && !e.1.is_empty() && {
                 let t: Symbol = e.1.get(0).unwrap().into_val(&env);
-                t == Symbol::new(&env, "transfer_ownership")
+                t == Symbol::new(&env, "ownership_nominated")
             }
         })
-        .expect("expected transfer_ownership event");
+        .expect("expected ownership_nominated event");
 
-    let old: Address = ev.1.get(1).unwrap().into_val(&env);
-    let new: Address = ev.1.get(2).unwrap().into_val(&env);
-    assert_eq!(old, owner);
-    assert_eq!(new, new_owner);
+    let old_n: Address = nomad_ev.1.get(1).unwrap().into_val(&env);
+    let new_n: Address = nomad_ev.1.get(2).unwrap().into_val(&env);
+    assert_eq!(old_n, owner);
+    assert_eq!(new_n, new_owner);
+
+    client.accept_ownership();
+    let events2 = env.events().all();
+    let accept_ev = events2
+        .iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "ownership_accepted")
+            }
+        })
+        .expect("expected ownership_accepted event");
+
+    let old_a: Address = accept_ev.1.get(1).unwrap().into_val(&env);
+    let new_a: Address = accept_ev.1.get(2).unwrap().into_val(&env);
+    assert_eq!(old_a, owner);
+    assert_eq!(new_a, new_owner);
 }
 
 #[test]
@@ -1170,6 +1295,29 @@ fn update_metadata_emits_event() {
 }
 
 #[test]
+fn update_metadata_without_existing_uses_empty_old() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let offering_id = String::from_str(&env, "offering-006");
+    let new_metadata = String::from_str(&env, "QmNewMetadataOnly");
+    client.update_metadata(&owner, &offering_id, &new_metadata);
+
+    let events = env.events().all();
+    let ev = events.last().expect("expected metadata_updated event");
+
+    assert_eq!(ev.0, vault_address);
+    let data: (String, String) = ev.2.into_val(&env);
+    assert_eq!(data.0, String::from_str(&env, ""));
+    assert_eq!(data.1, new_metadata);
+}
+
+#[test]
 #[should_panic(expected = "unauthorized: owner only")]
 fn unauthorized_cannot_set_metadata() {
     let env = Env::default();
@@ -1184,6 +1332,108 @@ fn unauthorized_cannot_set_metadata() {
     let offering_id = String::from_str(&env, "offering-005");
     let metadata = String::from_str(&env, "QmSomeMetadata");
     client.set_metadata(&unauthorized, &offering_id, &metadata);
+}
+
+#[test]
+fn set_metadata_max_length_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let offering_id = String::from_str(&env, "a".repeat(64).as_str());
+    let metadata = String::from_str(&env, "b".repeat(256).as_str());
+
+    client.set_metadata(&owner, &offering_id, &metadata);
+    assert_eq!(client.get_metadata(&offering_id), Some(metadata));
+}
+
+#[test]
+#[should_panic(expected = "metadata exceeds max length")]
+fn set_metadata_exceeds_length_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let offering_id = String::from_str(&env, "off-1");
+    let metadata = String::from_str(&env, "b".repeat(257).as_str());
+
+    client.set_metadata(&owner, &offering_id, &metadata);
+}
+
+#[test]
+#[should_panic(expected = "offering_id exceeds max length")]
+fn set_offering_id_exceeds_length_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let offering_id = String::from_str(&env, "a".repeat(65).as_str());
+    let metadata = String::from_str(&env, "meta");
+
+    client.set_metadata(&owner, &offering_id, &metadata);
+}
+
+#[test]
+fn update_metadata_max_length_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let offering_id = String::from_str(&env, "offering-update");
+    let metadata = String::from_str(&env, "b".repeat(256).as_str());
+
+    client.set_metadata(&owner, &offering_id, &String::from_str(&env, "old"));
+    client.update_metadata(&owner, &offering_id, &metadata);
+    assert_eq!(client.get_metadata(&offering_id), Some(metadata));
+}
+
+#[test]
+fn metadata_remains_after_ownership_transfer() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let new_owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let offering_id = String::from_str(&env, "off-transfer");
+    let metadata = String::from_str(&env, "ipfs://cid123");
+    client.set_metadata(&owner, &offering_id, &metadata);
+
+    client.transfer_ownership(&new_owner);
+
+    // Metadata should still be accessible
+    assert_eq!(client.get_metadata(&offering_id), Some(metadata.clone()));
+
+    // Old owner should no longer be able to update it
+    let update_res =
+        client.try_update_metadata(&owner, &offering_id, &String::from_str(&env, "new"));
+    assert!(update_res.is_err());
+
+    // New owner should be able to update it
+    client.update_metadata(&new_owner, &offering_id, &String::from_str(&env, "new"));
+    assert_eq!(
+        client.get_metadata(&offering_id),
+        Some(String::from_str(&env, "new"))
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1253,6 +1503,7 @@ fn vault_full_lifecycle() {
 
     // Admin change
     client.set_admin(&owner, &new_admin);
+    client.accept_admin();
     assert_eq!(client.get_admin(), new_admin);
 
     // Withdraw to recipient
@@ -1288,7 +1539,7 @@ fn init_with_revenue_pool_stores_address() {
     client.init(
         &owner,
         &usdc,
-        &Some(500),
+        &Some(500), &None,
         &None,
         &None,
         &Some(revenue_pool.clone()),
@@ -1323,6 +1574,34 @@ fn deduct_with_revenue_pool_transfers_usdc() {
 
     assert_eq!(client.balance(), 700);
     assert_eq!(usdc_client.balance(&revenue_pool), 300);
+}
+
+#[test]
+fn deduct_with_settlement_transfers_usdc() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let caller = Address::generate(&env);
+    let settlement = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 800);
+    client.init(
+        &owner,
+        &usdc_address,
+        &Some(800),
+        &Some(caller.clone()),
+        &None,
+        &None,
+        &None,
+    );
+    client.set_settlement(&owner, &settlement);
+
+    client.deduct(&caller, &250, &None);
+
+    assert_eq!(client.balance(), 550);
+    assert_eq!(usdc_client.balance(&settlement), 250);
 }
 
 #[test]
@@ -1361,6 +1640,45 @@ fn batch_deduct_with_revenue_pool_transfers_total_usdc() {
 
     assert_eq!(client.balance(), 650);
     assert_eq!(usdc_client.balance(&revenue_pool), 350);
+}
+
+#[test]
+fn batch_deduct_with_settlement_transfers_total_usdc() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let caller = Address::generate(&env);
+    let settlement = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 1000);
+    client.init(
+        &owner,
+        &usdc_address,
+        &Some(1000),
+        &Some(caller.clone()),
+        &None,
+        &None,
+        &Some(500),
+    );
+    client.set_settlement(&owner, &settlement);
+
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 200,
+            request_id: None
+        },
+        DeductItem {
+            amount: 150,
+            request_id: None
+        },
+    ];
+    client.batch_deduct(&caller, &items);
+
+    assert_eq!(client.balance(), 650);
+    assert_eq!(usdc_client.balance(&settlement), 350);
 }
 
 // ---------------------------------------------------------------------------
@@ -1406,42 +1724,13 @@ fn get_settlement_before_set_panics() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
+    env.mock_all_auths();
     client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.get_settlement();
 }
 
-// ---------------------------------------------------------------------------
-// Collection Iteration Tests (Vec<Address> AllowedDepositors)
-// ---------------------------------------------------------------------------
-// These tests verify Vec iteration behavior - Vec maintains stable insertion order
-
 #[test]
-fn allowed_depositors_vec_maintains_insertion_order() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let depositor1 = Address::generate(&env);
-    let depositor2 = Address::generate(&env);
-    let depositor3 = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
-
-    // Add depositors in a specific order
-    client.set_allowed_depositor(&owner, &Some(depositor1.clone()));
-    client.set_allowed_depositor(&owner, &Some(depositor2.clone()));
-    client.set_allowed_depositor(&owner, &Some(depositor3.clone()));
-
-    // Vec ordering is stable; all should be allowed to deposit
-    assert!(client.try_is_allowed(&depositor1).is_ok());
-    assert!(client.try_is_allowed(&depositor2).is_ok());
-    assert!(client.try_is_allowed(&depositor3).is_ok());
-}
-
-#[test]
-fn allowed_depositors_single_entry_operations() {
+fn test_clear_allowed_depositors() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let depositor = Address::generate(&env);
@@ -1449,115 +1738,127 @@ fn allowed_depositors_single_entry_operations() {
     let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 500);
-    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
-    // Single depositor in Vec
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
-
-    // Should be able to deposit
-    usdc_admin.mint(&depositor, &100);
-    usdc_client.approve(&depositor, &vault_address, &100, &1000);
-    let result = client.deposit(&depositor, &100);
-    assert_eq!(result, 600);
-}
-
-#[test]
-fn allowed_depositors_duplicate_add_ignored() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let depositor = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 500);
-    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
-
-    // Add same depositor twice
-    client.set_allowed_depositor(&owner, &Some(depositor.clone()));
-    client.set_allowed_depositor(&owner, &Some(depositor.clone()));
-
-    // Should not cause errors or double entries
-    assert!(client.try_is_allowed(&depositor).is_ok());
-}
-
-#[test]
-fn allowed_depositors_vec_clear_removes_all() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let depositor1 = Address::generate(&env);
-    let depositor2 = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 500);
-    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
-
-    // Add two depositors
-    client.set_allowed_depositor(&owner, &Some(depositor1.clone()));
-    client.set_allowed_depositor(&owner, &Some(depositor2.clone()));
-
-    // Clear all depositors
     client.set_allowed_depositor(&owner, &None);
 
-    // Neither should be able to deposit now
-    usdc_admin.mint(&depositor1, &100);
-    usdc_client.approve(&depositor1, &vault_address, &100, &1000);
-    let result = client.try_deposit(&depositor1, &100);
-    assert!(
-        result.is_err(),
-        "depositor should not be allowed after clear"
-    );
+    usdc_admin.mint(&depositor, &50);
+    usdc_client.approve(&depositor, &vault_address, &50, &1000);
+    let result = client.try_deposit(&depositor, &50);
+    assert!(result.is_err());
 }
 
 #[test]
-fn allowed_depositors_empty_vec_on_init() {
+fn test_set_authorized_caller() {
     let env = Env::default();
     let owner = Address::generate(&env);
-    let unauthorized = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    let auth_caller = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 100);
-    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
-    // Without setting allowed depositors, Vec should be empty
-    let result = client.try_deposit(&unauthorized, &50);
-    assert!(
-        result.is_err(),
-        "unauthorized address should not be able to deposit"
-    );
+    client.set_authorized_caller(&auth_caller);
+    let meta = client.get_meta();
+    assert_eq!(meta.authorized_caller, Some(auth_caller));
 }
 
 #[test]
-fn allowed_depositors_warning_vec_is_stable() {
-    // Documentation test: Vec<Address> for allowed depositors has STABLE ordering.
-    // Unlike Maps, Vec ordering is predictable and safe for all use cases.
-    // This is fundamentally different from Map iteration behavior.
+fn test_deduct_with_settlement_success() {
     let env = Env::default();
     let owner = Address::generate(&env);
-    let dep_a = Address::generate(&env);
-    let dep_b = Address::generate(&env);
-    let dep_c = Address::generate(&env);
+    let settlement = Address::generate(&env);
     let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
+    client.init(
+        &owner,
+        &usdc_address,
+        &Some(1000),
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+    client.set_settlement(&owner, &settlement);
 
-    // Vec maintains insertion order
-    client.set_allowed_depositor(&owner, &Some(dep_a.clone()));
-    client.set_allowed_depositor(&owner, &Some(dep_b.clone()));
-    client.set_allowed_depositor(&owner, &Some(dep_c.clone()));
+    client.deduct(&owner, &300, &None);
 
-    // All three are authorized (order doesn't affect authorization logic)
-    assert!(client.try_is_allowed(&dep_a).is_ok());
-    assert!(client.try_is_allowed(&dep_b).is_ok());
-    assert!(client.try_is_allowed(&dep_c).is_ok());
+    assert_eq!(client.balance(), 700);
+    assert_eq!(usdc_client.balance(&settlement), 300);
+}
 
-    // Safe for all use cases - Vec iteration has stable semantics
+// ---------------------------------------------------------------------------
+// Checked arithmetic — overflow / underflow boundary tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn deposit_near_i128_max_succeeds() {
+    // Verify that a balance sitting just below i128::MAX can accept one more deposit.
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    // Start with i128::MAX - 100 so there is headroom for a 100-unit deposit.
+    let initial: i128 = i128::MAX - 100;
+    fund_vault(&usdc_admin, &vault_address, initial);
+    client.init(&owner, &usdc, &Some(initial), &None, &None, &None, &None);
+
+    usdc_admin.mint(&owner, &100);
+    usdc_client.approve(&owner, &vault_address, &100, &1000);
+    let new_balance = client.deposit(&owner, &100);
+    assert_eq!(new_balance, i128::MAX);
+}
+
+#[test]
+fn deposit_overflow_panics() {
+    // A deposit that would push balance past i128::MAX must panic.
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, i128::MAX);
+    client.init(&owner, &usdc, &Some(i128::MAX), &None, &None, &None, &None);
+
+    usdc_admin.mint(&owner, &1);
+    usdc_client.approve(&owner, &vault_address, &1, &1000);
+    let result = client.try_deposit(&owner, &1);
+    assert!(result.is_err(), "expected overflow panic");
+}
+
+#[test]
+fn deduct_to_zero_succeeds() {
+    // Deducting the entire balance should leave exactly 0, not underflow.
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 500);
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
+
+    assert_eq!(client.deduct(&owner, &500, &None), 0);
+}
+
+#[test]
+fn withdraw_to_zero_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 300);
+    client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
+
+    assert_eq!(client.withdraw(&300), 0);
 }
