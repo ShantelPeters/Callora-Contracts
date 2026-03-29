@@ -40,6 +40,12 @@ impl RevenuePool {
     /// Emits an `init` event with the `admin` address as a topic and `usdc_token` address as data.
     pub fn init(env: Env, admin: Address, usdc_token: Address) {
         admin.require_auth();
+        if usdc_token == env.current_contract_address() {
+            panic!("invalid config: usdc_token cannot be the contract itself");
+        }
+        if usdc_token == admin {
+            panic!("invalid config: usdc_token cannot be the admin address");
+        }
         let inst = env.storage().instance();
         if inst.has(&Symbol::new(&env, ADMIN_KEY)) {
             panic!("revenue pool already initialized");
