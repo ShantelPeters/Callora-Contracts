@@ -2141,3 +2141,154 @@ fn non_owner_cannot_clear_allowed_depositors() {
     let result = client.try_clear_allowed_depositors(&attacker);
     assert!(result.is_err(), "non-owner must not clear allowlist");
 }
+
+// --- require_auth audit tests (Issue #160) ---
+#[test]
+fn require_auth_set_admin_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_set_admin(&attacker, &new_admin);
+    assert!(result.is_err(), "set_admin must require auth");
+}
+#[test]
+fn require_auth_distribute_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 1000);
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_distribute(&attacker, &recipient, &100);
+    assert!(result.is_err(), "distribute must require auth");
+}
+#[test]
+fn require_auth_pause_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_pause(&attacker);
+    assert!(result.is_err(), "pause must require auth");
+}
+#[test]
+fn require_auth_unpause_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    client.pause(&owner);
+    env.set_auths(&[]);
+    let result = client.try_unpause(&attacker);
+    assert!(result.is_err(), "unpause must require auth");
+}
+#[test]
+fn require_auth_deposit_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    usdc_admin.mint(&depositor, &500);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    client.set_allowed_depositor(&owner, &Some(depositor.clone()));
+    env.set_auths(&[]);
+    let result = client.try_deposit(&depositor, &100);
+    assert!(result.is_err(), "deposit must require auth");
+}
+#[test]
+fn require_auth_deduct_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 1000);
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_deduct(&attacker, &100, &None);
+    assert!(result.is_err(), "deduct must require auth");
+}
+#[test]
+fn require_auth_set_revenue_pool_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let pool = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_set_revenue_pool(&attacker, &Some(pool));
+    assert!(result.is_err(), "set_revenue_pool must require auth");
+}
+#[test]
+fn require_auth_set_settlement_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let settlement = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_set_settlement(&attacker, &settlement);
+    assert!(result.is_err(), "set_settlement must require auth");
+}
+#[test]
+fn require_auth_transfer_ownership_fails_without_auth() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let new_owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    env.set_auths(&[]);
+    let result = client.try_transfer_ownership(&new_owner);
+    assert!(result.is_err(), "transfer_ownership must require auth");
+}
+// SECURITY NOTE: require_owner() uses assert! instead of require_auth().
+// All callers already invoke caller.require_auth() before calling require_owner,
+// so host-level auth is enforced transitively. Documented per Issue #160.
+#[test]
+fn require_owner_rejects_non_owner_via_assert() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 100);
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
+    let result = client.try_require_owner(&attacker);
+    assert!(result.is_err(), "require_owner rejects non-owner via assert");
+}

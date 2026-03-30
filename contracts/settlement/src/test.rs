@@ -16,6 +16,7 @@ mod settlement_tests {
                 let addr = env.register(CalloraSettlement, ());
         let client = CalloraSettlementClient::new(&env, &addr);
         client.init(&admin, &vault);
+        let third_party = Address::generate(&env);
         (env, addr, admin, vault, third_party)
     }
 
@@ -913,4 +914,66 @@ mod settlement_tests {
         assert_eq!(pool_after.last_updated, 1_700_000_100);
         assert_eq!(pool_after.total_balance, 1500i128);
     }
+
+
+    // --- require_auth audit tests (Issue #160) ---
+    #[test]
+    fn require_auth_set_admin_fails_without_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let attacker = Address::generate(&env);
+        let new_admin = Address::generate(&env);
+        let vault = Address::generate(&env);
+        let addr = env.register(CalloraSettlement, ());
+        let client = CalloraSettlementClient::new(&env, &addr);
+        client.init(&admin, &vault);
+        env.set_auths(&[]);
+        let result = client.try_set_admin(&attacker, &new_admin);
+        assert!(result.is_err(), "set_admin must require auth");
+    }
+    #[test]
+    fn require_auth_set_vault_fails_without_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let attacker = Address::generate(&env);
+        let vault = Address::generate(&env);
+        let new_vault = Address::generate(&env);
+        let addr = env.register(CalloraSettlement, ());
+        let client = CalloraSettlementClient::new(&env, &addr);
+        client.init(&admin, &vault);
+        env.set_auths(&[]);
+        let result = client.try_set_vault(&attacker, &new_vault);
+        assert!(result.is_err(), "set_vault must require auth");
+    }
+    #[test]
+    fn require_auth_receive_payment_fails_without_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let vault = Address::generate(&env);
+        let attacker = Address::generate(&env);
+        let addr = env.register(CalloraSettlement, ());
+        let client = CalloraSettlementClient::new(&env, &addr);
+        client.init(&admin, &vault);
+        env.set_auths(&[]);
+        let result = client.try_receive_payment(&attacker, &100i128, &true, &None);
+        assert!(result.is_err(), "receive_payment must require auth");
+    }
+    // SECURITY NOTE: settlement::init has no require_auth() by design.
+    // It is a one-time initializer guarded by an already-initialized panic.
+    // This is an intentional exception documented per Issue #160.
+    #[test]
+    fn init_no_auth_required_intentional_exception() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let vault = Address::generate(&env);
+        let addr = env.register(CalloraSettlement, ());
+        let client = CalloraSettlementClient::new(&env, &addr);
+        // No mock_all_auths — init should succeed without host auth (intentional)
+        client.init(&admin, &vault);
+        assert_eq!(client.get_admin(), admin);
+    }
+
 }

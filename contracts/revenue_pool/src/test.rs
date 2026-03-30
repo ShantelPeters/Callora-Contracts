@@ -266,3 +266,65 @@ fn batch_distribute_success_events() {
         }
     }
 }
+
+// --- require_auth audit tests (Issue #160) ---
+#[test]
+fn require_auth_set_admin_fails_without_auth() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    let (_, client) = create_pool(&env);
+    let (usdc, _, _) = create_usdc(&env, &admin);
+    client.init(&admin, &usdc);
+    env.set_auths(&[]);
+    let result = client.try_set_admin(&attacker, &new_admin);
+    assert!(result.is_err(), "set_admin must require auth");
+}
+#[test]
+fn require_auth_distribute_fails_without_auth() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (pool_addr, client) = create_pool(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &admin);
+    env.mock_all_auths();
+    client.init(&admin, &usdc);
+    fund_pool(&usdc_admin, &pool_addr, 1000);
+    env.set_auths(&[]);
+    let result = client.try_distribute(&attacker, &recipient, &100);
+    assert!(result.is_err(), "distribute must require auth");
+}
+#[test]
+fn require_auth_batch_distribute_fails_without_auth() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let dev = Address::generate(&env);
+    let (pool_addr, client) = create_pool(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &admin);
+    env.mock_all_auths();
+    client.init(&admin, &usdc);
+    fund_pool(&usdc_admin, &pool_addr, 1000);
+    let mut payments: Vec<(Address, i128)> = Vec::new(&env);
+    payments.push_back((dev.clone(), 100_i128));
+    env.set_auths(&[]);
+    let result = client.try_batch_distribute(&attacker, &payments);
+    assert!(result.is_err(), "batch_distribute must require auth");
+}
+#[test]
+fn require_auth_receive_payment_fails_without_auth() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let (pool_addr, client) = create_pool(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &admin);
+    env.mock_all_auths();
+    client.init(&admin, &usdc);
+    fund_pool(&usdc_admin, &pool_addr, 1000);
+    env.set_auths(&[]);
+    let result = client.try_receive_payment(&attacker, &100, &false);
+    assert!(result.is_err(), "receive_payment must require auth");
+}

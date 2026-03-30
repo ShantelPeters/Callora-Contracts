@@ -165,3 +165,22 @@ Before any mainnet deployment:
 ---
 
 **Note**: This checklist should be reviewed and updated regularly as new security patterns emerge and the codebase evolves.
+
+## require_auth() Audit (Issue #160)
+
+All privileged entrypoints across `vault`, `revenue_pool`, and `settlement` contracts
+have been audited for `require_auth()` coverage as part of Issue #160.
+
+### Findings
+- All privileged functions call `require_auth()` on the caller before executing. ✅
+- Negative tests added to each crate's `test.rs` confirming unauthenticated calls are rejected.
+
+### Intentional Exceptions
+| Contract   | Function         | Reason |
+|------------|------------------|--------|
+| settlement | `init()`         | One-time initializer guarded by already-initialized panic; no auth required by design. |
+| vault      | `require_owner()`| Internal helper using `assert!` for address equality. All public callers invoke `caller.require_auth()` before calling this helper, so host-level auth is enforced transitively. Documented gap: `require_owner` itself does not call `require_auth()`. |
+
+### Cross-reference
+- Audit branch: `test/require-auth-sweep`
+- Tests: `contracts/vault/src/test.rs`, `contracts/revenue_pool/src/test.rs`, `contracts/settlement/src/test.rs`
