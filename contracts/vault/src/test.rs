@@ -2295,3 +2295,136 @@ fn require_owner_rejects_non_owner_via_assert() {
         "require_owner rejects non-owner via assert"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Issue #151 — min_deposit boundary tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn deposit_exact_min_deposit_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &Some(50), &None, &None);
+
+    usdc_admin.mint(&owner, &50);
+    usdc_client.approve(&owner, &vault_address, &50, &1000);
+    let balance = client.deposit(&owner, &50);
+    assert_eq!(balance, 50);
+}
+
+#[test]
+#[should_panic(expected = "deposit below minimum")]
+fn deposit_below_min_deposit_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &Some(50), &None, &None);
+
+    usdc_admin.mint(&owner, &49);
+    usdc_client.approve(&owner, &vault_address, &49, &1000);
+    client.deposit(&owner, &49);
+}
+
+#[test]
+fn deposit_above_min_deposit_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &Some(50), &None, &None);
+
+    usdc_admin.mint(&owner, &51);
+    usdc_client.approve(&owner, &vault_address, &51, &1000);
+    let balance = client.deposit(&owner, &51);
+    assert_eq!(balance, 51);
+}
+
+#[test]
+fn deposit_with_zero_min_deposit_allows_any_positive_amount() {
+    // When min_deposit is 0 (default), any positive amount should succeed.
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &Some(0), &None, &None);
+
+    usdc_admin.mint(&owner, &1);
+    usdc_client.approve(&owner, &vault_address, &1, &1000);
+    let balance = client.deposit(&owner, &1);
+    assert_eq!(balance, 1);
+}
+
+#[test]
+fn init_min_deposit_stored_in_meta() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &Some(100), &None, &None);
+    let meta = client.get_meta();
+    assert_eq!(meta.min_deposit, 100);
+}
+
+#[test]
+fn init_default_min_deposit_is_zero() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    let meta = client.get_meta();
+    assert_eq!(meta.min_deposit, 0);
+}
+
+#[test]
+fn deposit_one_below_large_min_deposit_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &Some(1_000_000), &None, &None);
+
+    usdc_admin.mint(&owner, &999_999);
+    usdc_client.approve(&owner, &vault_address, &999_999, &1000);
+    let result = client.try_deposit(&owner, &999_999);
+    assert!(result.is_err(), "deposit one below large min_deposit must fail");
+}
+
+#[test]
+fn deposit_exact_large_min_deposit_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &Some(1_000_000), &None, &None);
+
+    usdc_admin.mint(&owner, &1_000_000);
+    usdc_client.approve(&owner, &vault_address, &1_000_000, &1000);
+    let balance = client.deposit(&owner, &1_000_000);
+    assert_eq!(balance, 1_000_000);
+}
