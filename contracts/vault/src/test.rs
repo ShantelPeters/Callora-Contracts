@@ -2967,3 +2967,121 @@ fn deposit_exact_large_min_deposit_succeeds() {
     let balance = client.deposit(&owner, &1_000_000);
     assert_eq!(balance, 1_000_000);
 }
+
+// ---------------------------------------------------------------------------
+// max_deduct boundary tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn deduct_equal_to_max_deduct_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 500);
+    // max_deduct = 100, deposit 200 so balance is sufficient
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &Some(100));
+    usdc_admin.mint(&owner, &200);
+    usdc_client.approve(&owner, &vault_address, &200, &1000);
+    client.deposit(&owner, &200);
+    // deduct exactly equal to max_deduct — must succeed
+    let balance = client.deduct(&owner, &100, &None);
+    assert_eq!(balance, 600);
+}
+
+#[test]
+#[should_panic(expected = "deduct amount exceeds max_deduct")]
+fn deduct_above_max_deduct_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 500);
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &Some(100));
+    usdc_admin.mint(&owner, &200);
+    usdc_client.approve(&owner, &vault_address, &200, &1000);
+    client.deposit(&owner, &200);
+    // deduct 101 > max_deduct 100 — must panic
+    client.deduct(&owner, &101, &None);
+}
+
+#[test]
+fn deduct_default_cap_is_i128_max() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    // no max_deduct supplied — default cap (i128::MAX) applies
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    usdc_admin.mint(&owner, &1_000_000);
+    usdc_client.approve(&owner, &vault_address, &1_000_000, &1000);
+    client.deposit(&owner, &1_000_000);
+    // large deduct well below i128::MAX should succeed
+    let balance = client.deduct(&owner, &999_999, &None);
+    assert_eq!(balance, 1);
+}
+
+#[test]
+fn batch_deduct_each_item_constrained_by_max_deduct() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    // max_deduct = 50
+    client.init(&owner, &usdc, &None, &None, &None, &None, &Some(50));
+    usdc_admin.mint(&owner, &300);
+    usdc_client.approve(&owner, &vault_address, &300, &1000);
+    client.deposit(&owner, &300);
+    // three items each exactly at the cap — all must pass
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 50,
+            request_id: None
+        },
+        DeductItem {
+            amount: 50,
+            request_id: None
+        },
+        DeductItem {
+            amount: 50,
+            request_id: None
+        },
+    ];
+    let balance = client.batch_deduct(&owner, &items);
+    assert_eq!(balance, 150);
+}
+
+#[test]
+#[should_panic(expected = "deduct amount exceeds max_deduct")]
+fn batch_deduct_one_item_above_max_deduct_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &Some(50));
+    usdc_admin.mint(&owner, &300);
+    usdc_client.approve(&owner, &vault_address, &300, &1000);
+    client.deposit(&owner, &300);
+    // second item exceeds cap — must panic
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 50,
+            request_id: None
+        },
+        DeductItem {
+            amount: 51,
+            request_id: None
+        },
+    ];
+    client.batch_deduct(&owner, &items);
+}
