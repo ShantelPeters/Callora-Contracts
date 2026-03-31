@@ -17,6 +17,7 @@ mod settlement_tests {
         let addr = env.register(CalloraSettlement, ());
         let client = CalloraSettlementClient::new(&env, &addr);
         client.init(&admin, &vault);
+        let third_party = Address::generate(&env);
         (env, addr, admin, vault, third_party)
     }
 
