@@ -29,6 +29,7 @@ pub enum StorageKey {
     MaxDeduct,
     Paused,
     Metadata(String),
+    Price(String),
     PendingOwner,
     PendingAdmin,
     DepositorList,
@@ -254,11 +255,16 @@ impl CalloraVault {
         env.storage().instance().get(&StorageKey::MaxDeduct).unwrap_or(DEFAULT_MAX_DEDUCT)
     }
 
-    pub fn get_max_deduct(env: Env) -> i128 {
-        env.storage()
-            .instance()
-            .get(&StorageKey::MaxDeduct)
-            .unwrap_or(DEFAULT_MAX_DEDUCT)
+    pub fn set_price(env: Env, caller: Address, api_id: String, price: i128) {
+        caller.require_auth();
+        Self::require_owner(env.clone(), caller);
+        assert!(price > 0, "price must be positive");
+        env.storage().instance().set(&StorageKey::Price(api_id.clone()), &price);
+        env.events().publish((Symbol::new(&env, "price_set"), api_id), price);
+    }
+
+    pub fn get_price(env: Env, api_id: String) -> Option<i128> {
+        env.storage().instance().get(&StorageKey::Price(api_id))
     }
 
     pub fn deposit(env: Env, caller: Address, amount: i128) -> i128 {

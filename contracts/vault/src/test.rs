@@ -2098,6 +2098,62 @@ fn withdraw_to_zero_succeeds() {
 }
 
 // ---------------------------------------------------------------------------
+// set_price / get_price tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn set_and_get_price() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let api_id = String::from_str(&env, “api-001”);
+    client.set_price(&owner, &api_id, &100);
+    assert_eq!(client.get_price(&api_id), Some(100));
+}
+
+#[test]
+fn get_price_returns_none_when_unset() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    let api_id = String::from_str(&env, “api-unknown”);
+    assert_eq!(client.get_price(&api_id), None);
+}
+
+#[test]
+#[should_panic(expected = “price must be positive”)]
+fn set_price_zero_panics() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    client.set_price(&owner, &String::from_str(&env, “api-001”), &0);
+}
+
+#[test]
+fn set_price_non_owner_fails() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let (_, client) = create_vault(&env);
+    let (usdc, _, _) = create_usdc(&env, &owner);
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    let result = client.try_set_price(&attacker, &String::from_str(&env, “api-001”), &50);
+    assert!(result.is_err(), “non-owner must not set price”);
+}
+
+// ---------------------------------------------------------------------------
 // Issue #108 â€” set_allowed_depositor: duplicate add, clear, unauthorized
 // ---------------------------------------------------------------------------
 
@@ -2561,8 +2617,8 @@ fn get_allowed_depositors_returns_list() {
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
     client.init(&owner, &usdc, &None, &None, &None, &None, &None);
-    client.set_allowed_depositor(&owner, &d1);
-    client.set_allowed_depositor(&owner, &d2);
+    client.set_allowed_depositor(&owner, &Some(d1));
+    client.set_allowed_depositor(&owner, &Some(d2));
     let list = client.get_allowed_depositors();
     assert_eq!(list.len(), 2);
 }
