@@ -184,3 +184,49 @@ have been audited for `require_auth()` coverage as part of Issue #160.
 ### Cross-reference
 - Audit branch: `test/require-auth-sweep`
 - Tests: `contracts/vault/src/test.rs`, `contracts/revenue_pool/src/test.rs`, `contracts/settlement/src/test.rs`
+
+## Checked Arithmetic Audit (Issue #233)
+
+Every `i128` balance mutation in `callora-vault` has been audited and now uses
+`checked_add` / `checked_sub` with an explicit descriptive panic on overflow.
+
+### Mutation inventory
+
+| Function | Operation | Guard |
+|---|---|---|
+| `deposit` | `balance + amount` | `checked_add` → panic `"balance overflow"` |
+| `deduct` | `balance - amount` | `checked_sub` → panic `"balance underflow"` |
+| `batch_deduct` | `running - item.amount` (per item) | `checked_sub` → panic `"balance underflow"` |
+| `batch_deduct` | `total + item.amount` (accumulator) | `checked_add` → panic `"total overflow"` |
+| `withdraw` | `balance - amount` | `checked_sub` → panic `"balance underflow"` |
+| `withdraw_to` | `balance - amount` | `checked_sub` → panic `"balance underflow"` |
+
+### Behavior near `i128::MAX`
+
+- **deposit**: A deposit that would push `balance` past `i128::MAX` panics with
+  `"balance overflow"`. A balance of exactly `i128::MAX` is representable and
+  tested (`deposit_near_i128_max_succeeds`, `deposit_overflow_panics`).
+- **deduct / withdraw / withdraw_to**: Subtraction is always preceded by
+  `assert!(balance >= amount)`, so underflow via a normal call path is
+  impossible. `checked_sub` provides a secondary safety net and is tested by
+  `deduct_to_zero_succeeds`, `withdraw_to_zero_succeeds`, and
+  `withdraw_near_i128_max_succeeds`.
+- **batch_deduct**: Each item is validated against `running` before subtraction,
+  bounding `total ≤ original_balance ≤ i128::MAX` and preventing overflow in
+  the accumulator. End-to-end drain is tested by `batch_deduct_to_zero_succeeds`.
+
+### Workspace `overflow-checks`
+
+`Cargo.toml` sets `overflow-checks = true` for both `[profile.dev]` and
+`[profile.release]` (including `wasm32-unknown-unknown` release builds), so
+plain arithmetic would also trap in all build configurations. The explicit
+`checked_*` calls make intent clear and are independent of profile flags.
+
+### Fixes applied
+
+- Removed duplicate `get_max_deduct()` definition in `lib.rs`.
+- Replaced bare `.unwrap()` on checked operations in `deduct`, `batch_deduct`,
+  `withdraw`, and `withdraw_to` with `unwrap_or_else(|| panic!("..."))` to
+  provide descriptive failure messages.
+- Added three targeted boundary tests: `withdraw_near_i128_max_succeeds`,
+  `batch_deduct_to_zero_succeeds`.

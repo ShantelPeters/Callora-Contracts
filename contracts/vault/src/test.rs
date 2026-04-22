@@ -2097,6 +2097,45 @@ fn withdraw_to_zero_succeeds() {
     assert_eq!(client.withdraw(&300), 0);
 }
 
+#[test]
+fn withdraw_near_i128_max_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    let initial: i128 = i128::MAX - 100;
+    fund_vault(&usdc_admin, &vault_address, initial);
+    client.init(&owner, &usdc, &Some(initial), &None, &None, &None, &None);
+
+    let remaining = client.withdraw(&(initial - 1));
+    assert_eq!(remaining, 1);
+}
+
+#[test]
+fn batch_deduct_to_zero_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    usdc_admin.mint(&owner, &600);
+    usdc_client.approve(&owner, &vault_address, &600, &1000);
+    client.deposit(&owner, &600);
+
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem { amount: 200, request_id: None },
+        DeductItem { amount: 200, request_id: None },
+        DeductItem { amount: 200, request_id: None },
+    ];
+    assert_eq!(client.batch_deduct(&owner, &items), 0);
+}
+
 // ---------------------------------------------------------------------------
 // Issue #108 â€” set_allowed_depositor: duplicate add, clear, unauthorized
 // ---------------------------------------------------------------------------
@@ -2561,8 +2600,8 @@ fn get_allowed_depositors_returns_list() {
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
     client.init(&owner, &usdc, &None, &None, &None, &None, &None);
-    client.set_allowed_depositor(&owner, &d1);
-    client.set_allowed_depositor(&owner, &d2);
+    client.set_allowed_depositor(&owner, &Some(d1));
+    client.set_allowed_depositor(&owner, &Some(d2));
     let list = client.get_allowed_depositors();
     assert_eq!(list.len(), 2);
 }
@@ -2595,7 +2634,7 @@ fn vault_unpaused_event_emitted() {
 //   1. VaultMeta.balance >= 0 after every operation.
 //   2. Local simulator tracks the same balance as the contract at each step.
 //   3. batch_deduct is atomic: a failing batch leaves balance unchanged.
-//   4. pause blocks deposits but not deductions; unpause restores deposits.
+//   4. pause blocks deposits AND deductions; unpause restores both.
 //   5. No single deduct/batch item may exceed max_deduct.
 //
 // Seeds are fixed so runs are deterministic and reproducible in CI.
@@ -2661,11 +2700,11 @@ mod fuzz {
                 // --- single deduct ---
                 1 => {
                     let amount: i128 = rng.gen_range(1..=max_deduct_val);
-                    if sim >= amount {
+                    if !paused && sim >= amount {
                         sim -= amount;
                         client.deduct(&caller, &amount, &None);
                     } else {
-                        // must fail — balance unchanged
+                        // must fail — balance unchanged (paused or insufficient)
                         assert!(client.try_deduct(&caller, &amount, &None).is_err());
                     }
                 }
@@ -2685,11 +2724,11 @@ mod fuzz {
                         };
                         items.push_back(DeductItem { amount: amt, request_id: None });
                     }
-                    if valid && sim >= batch_total {
+                    if !paused && valid && sim >= batch_total {
                         sim -= batch_total;
                         client.batch_deduct(&caller, &items);
                     } else {
-                        // batch must fail atomically — balance unchanged
+                        // batch must fail atomically — balance unchanged (paused, overflow, or insufficient)
                         let before = client.balance();
                         let _ = client.try_batch_deduct(&caller, &items);
                         assert_eq!(client.balance(), before, "failed batch must not change balance");
