@@ -2631,7 +2631,7 @@ fn vault_unpaused_event_emitted() {
 //   1. VaultMeta.balance >= 0 after every operation.
 //   2. Local simulator tracks the same balance as the contract at each step.
 //   3. batch_deduct is atomic: a failing batch leaves balance unchanged.
-//   4. pause blocks deposits but not deductions; unpause restores deposits.
+//   4. pause blocks deposits and deductions; unpause restores them.
 //   5. No single deduct/batch item may exceed max_deduct.
 //
 // Seeds are fixed so runs are deterministic and reproducible in CI.
@@ -2684,7 +2684,8 @@ mod fuzz {
             match op {
                 // --- deposit ---
                 0 => {
-                    let amount: i128 = rng.gen_range(1..=max_deduct_val);
+                    let deposit_max = core::cmp::min(max_deduct_val, 1_000_000_i128);
+                    let amount: i128 = rng.gen_range(1..=deposit_max);
                     if paused {
                         // deposit must fail while paused
                         assert!(client.try_deposit(&owner, &amount).is_err());
@@ -2697,7 +2698,9 @@ mod fuzz {
                 // --- single deduct ---
                 1 => {
                     let amount: i128 = rng.gen_range(1..=max_deduct_val);
-                    if sim >= amount {
+                    if paused {
+                        assert!(client.try_deduct(&caller, &amount, &None).is_err());
+                    } else if sim >= amount {
                         sim -= amount;
                         client.deduct(&caller, &amount, &None);
                     } else {
@@ -2727,7 +2730,15 @@ mod fuzz {
                             request_id: None,
                         });
                     }
-                    if valid && sim >= batch_total {
+                    if paused {
+                        let before = client.balance();
+                        let _ = client.try_batch_deduct(&caller, &items);
+                        assert_eq!(
+                            client.balance(),
+                            before,
+                            "failed batch must not change balance"
+                        );
+                    } else if valid && sim >= batch_total {
                         sim -= batch_total;
                         client.batch_deduct(&caller, &items);
                     } else {
