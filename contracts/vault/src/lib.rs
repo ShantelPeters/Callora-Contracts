@@ -271,13 +271,6 @@ impl CalloraVault {
             .unwrap_or(false)
     }
 
-    pub fn get_max_deduct(env: Env) -> i128 {
-        env.storage()
-            .instance()
-            .get(&StorageKey::MaxDeduct)
-            .unwrap_or(DEFAULT_MAX_DEDUCT)
-    }
-
     pub fn deposit(env: Env, caller: Address, amount: i128) -> i128 {
         caller.require_auth();
         Self::require_not_paused(env.clone());
@@ -316,7 +309,6 @@ impl CalloraVault {
     pub fn deduct(env: Env, caller: Address, amount: i128, request_id: Option<Symbol>) -> i128 {
         caller.require_auth();
         Self::require_not_paused(env.clone());
-        Self::require_routing_configured(env.clone());
         assert!(amount > 0, "amount must be positive");
         let max_d = Self::get_max_deduct(env.clone());
         assert!(amount <= max_d, "deduct amount exceeds max_deduct");
@@ -328,7 +320,7 @@ impl CalloraVault {
         assert!(auth, "unauthorized caller");
         assert!(meta.balance >= amount, "insufficient balance");
         let mut meta = Self::get_meta(env.clone());
-        meta.balance = meta.balance.checked_sub(amount).unwrap();
+        meta.balance = meta.balance.checked_sub(amount).unwrap_or_else(|| panic!("balance underflow"));
         env.storage().instance().set(&StorageKey::Meta, &meta);
         let inst = env.storage().instance();
         if let Some(s) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
@@ -351,7 +343,6 @@ impl CalloraVault {
     pub fn batch_deduct(env: Env, caller: Address, items: Vec<DeductItem>) -> i128 {
         caller.require_auth();
         Self::require_not_paused(env.clone());
-        Self::require_routing_configured(env.clone());
         let n = items.len();
         assert!(n > 0, "batch_deduct requires at least one item");
         assert!(n <= MAX_BATCH_SIZE, "batch too large");
@@ -368,8 +359,8 @@ impl CalloraVault {
             assert!(item.amount > 0, "amount must be positive");
             assert!(item.amount <= max_d, "deduct amount exceeds max_deduct");
             assert!(running >= item.amount, "insufficient balance");
-            running = running.checked_sub(item.amount).unwrap();
-            total = total.checked_add(item.amount).unwrap();
+            running = running.checked_sub(item.amount).unwrap_or_else(|| panic!("balance underflow"));
+            total = total.checked_add(item.amount).unwrap_or_else(|| panic!("total overflow"));
         }
         meta.balance = running;
         env.storage().instance().set(&StorageKey::Meta, &meta);
@@ -449,7 +440,7 @@ impl CalloraVault {
             .expect("vault not initialized");
         let usdc = token::Client::new(&env, &ua);
         usdc.transfer(&env.current_contract_address(), &meta.owner, &amount);
-        meta.balance = meta.balance.checked_sub(amount).unwrap();
+        meta.balance = meta.balance.checked_sub(amount).unwrap_or_else(|| panic!("balance underflow"));
         env.storage().instance().set(&StorageKey::Meta, &meta);
         env.events().publish(
             (Symbol::new(&env, "withdraw"), meta.owner.clone()),
@@ -470,7 +461,7 @@ impl CalloraVault {
             .expect("vault not initialized");
         let usdc = token::Client::new(&env, &ua);
         usdc.transfer(&env.current_contract_address(), &to, &amount);
-        meta.balance = meta.balance.checked_sub(amount).unwrap();
+        meta.balance = meta.balance.checked_sub(amount).unwrap_or_else(|| panic!("balance underflow"));
         env.storage().instance().set(&StorageKey::Meta, &meta);
         env.events().publish(
             (Symbol::new(&env, "withdraw_to"), meta.owner.clone(), to),
@@ -479,30 +470,6 @@ impl CalloraVault {
         meta.balance
     }
 
-    /// Sets or clears the revenue pool routing address.
-    ///
-    /// # Purpose
-    /// Configures where USDC is routed during deduct operations when no settlement
-    /// address is configured. The revenue pool serves as the fallback routing destination.
-    ///
-    /// # Validation
-    /// - Caller must be admin
-    /// - Revenue pool address cannot be the vault's own address
-    /// - Setting to `None` clears the configuration
-    ///
-    /// # Safety Guarantees
-    /// - Atomic update: state is either fully updated or unchanged
-    /// - Emits event for audit trail (`set_revenue_pool` or `clear_revenue_pool`)
-    /// - Prevents self-referential routing (vault → vault)
-    ///
-    /// # Routing Behavior
-    /// - If both settlement and revenue_pool are set, settlement takes priority
-    /// - If only revenue_pool is set, all deducts route to revenue_pool
-    /// - If neither is set, deduct operations will fail
-    ///
-    /// # Events
-    /// - `set_revenue_pool(caller) → address` when setting
-    /// - `clear_revenue_pool(caller) → ()` when clearing
     pub fn set_revenue_pool(env: Env, caller: Address, revenue_pool: Option<Address>) {
         caller.require_auth();
         let admin = Self::get_admin(env.clone());
@@ -511,10 +478,6 @@ impl CalloraVault {
         }
         match revenue_pool {
             Some(addr) => {
-                assert!(
-                    addr != env.current_contract_address(),
-                    "revenue_pool cannot be vault address"
-                );
                 env.storage()
                     .instance()
                     .set(&StorageKey::RevenuePool, &addr);
@@ -529,109 +492,21 @@ impl CalloraVault {
         }
     }
 
-    /// Returns the revenue pool contract address configured for this vault.
-    ///
-    /// # Purpose
-    /// Exposes the revenue pool address to enable off-chain indexers and external
-    /// contracts to query where deducted funds are routed when no settlement contract
-    /// is configured.
-    ///
-    /// # Return Value
-    /// Returns `Option<Address>` containing the revenue pool address if configured,
-    /// or `None` if not set. This reflects the latest committed state set via
-    /// `set_revenue_pool()`.
-    ///
-    /// # Safety Guarantees
-    /// - **Read-only**: This function performs no state mutation or side effects.
-    /// - **Consistent**: Returns only final committed state, never intermediate values.
-    /// - **Deterministic**: Identical state inputs always produce identical outputs.
-    /// - **Non-panicking**: Returns `None` gracefully when revenue pool is not configured.
-    ///
-    /// # Indexer Usage
-    /// Safe for external indexers and off-chain queries. Call this function to
-    /// determine the active revenue pool routing destination. Note that if both
-    /// settlement and revenue pool are configured, settlement takes priority for
-    /// fund routing during `deduct()` and `batch_deduct()` operations.
-    ///
-    /// # Example
-    /// ```ignore
-    /// match vault.get_revenue_pool() {
-    ///     Some(pool_addr) => { /* revenue pool is configured */ }
-    ///     None => { /* no revenue pool configured */ }
-    /// }
-    /// ```
     pub fn get_revenue_pool(env: Env) -> Option<Address> {
         env.storage().instance().get(&StorageKey::RevenuePool)
     }
 
-    /// Sets the settlement routing address.
-    ///
-    /// # Purpose
-    /// Configures the primary routing destination for USDC during deduct operations.
-    /// Settlement takes priority over revenue_pool when both are configured.
-    ///
-    /// # Validation
-    /// - Caller must be admin
-    /// - Settlement address cannot be the vault's own address
-    ///
-    /// # Safety Guarantees
-    /// - Atomic update: state is immediately committed
-    /// - Emits event for audit trail (`set_settlement`)
-    /// - Prevents self-referential routing (vault → vault)
-    ///
-    /// # Routing Priority
-    /// 1. If settlement is set → route to settlement (highest priority)
-    /// 2. Else if revenue_pool is set → route to revenue_pool
-    /// 3. Else → deduct operations fail with "routing not configured"
-    ///
-    /// # Events
-    /// - `set_settlement(caller) → address` when setting
     pub fn set_settlement(env: Env, caller: Address, settlement_address: Address) {
         caller.require_auth();
         let admin = Self::get_admin(env.clone());
         if caller != admin {
             panic!("unauthorized: caller is not admin");
         }
-        assert!(
-            settlement_address != env.current_contract_address(),
-            "settlement cannot be vault address"
-        );
         env.storage()
             .instance()
             .set(&StorageKey::Settlement, &settlement_address);
-        env.events().publish(
-            (Symbol::new(&env, "set_settlement"), caller),
-            settlement_address,
-        );
     }
 
-    /// Returns the settlement contract address configured for this vault.
-    ///
-    /// # Purpose
-    /// Exposes the settlement address to enable off-chain indexers and external
-    /// contracts to query where deducted funds are routed during settlement operations.
-    ///
-    /// # Return Value
-    /// Returns the `Address` of the settlement contract. This reflects the latest
-    /// committed state set via `set_settlement()`.
-    ///
-    /// # Safety Guarantees
-    /// - **Read-only**: This function performs no state mutation or side effects.
-    /// - **Consistent**: Returns only final committed state, never intermediate values.
-    /// - **Deterministic**: Identical state inputs always produce identical outputs.
-    ///
-    /// # Panics
-    /// Panics if the settlement address has not been configured via `set_settlement()`.
-    ///
-    /// # Indexer Usage
-    /// Safe for external indexers and off-chain queries. Call this function to
-    /// determine the active settlement routing destination at any point in time.
-    ///
-    /// # Example
-    /// ```ignore
-    /// let settlement_addr = vault.get_settlement();
-    /// // Use settlement_addr to track fund flows
-    /// ```
     pub fn get_settlement(env: Env) -> Address {
         env.storage()
             .instance()
@@ -731,22 +606,6 @@ impl CalloraVault {
         assert!(
             *caller == admin || *caller == meta.owner,
             "unauthorized: caller is not admin or owner"
-        );
-    }
-
-    /// Validates that at least one routing address is configured.
-    /// Panics if neither settlement nor revenue_pool is set.
-    fn require_routing_configured(env: Env) {
-        let inst = env.storage().instance();
-        let has_settlement = inst
-            .get::<StorageKey, Address>(&StorageKey::Settlement)
-            .is_some();
-        let has_revenue_pool = inst
-            .get::<StorageKey, Address>(&StorageKey::RevenuePool)
-            .is_some();
-        assert!(
-            has_settlement || has_revenue_pool,
-            "routing not configured: set settlement or revenue_pool address"
         );
     }
 }

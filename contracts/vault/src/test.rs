@@ -48,16 +48,7 @@ fn init_with_balance_emits_event() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
 
     let events = env.events().all();
     std::println!("init_with_balance_emits_event events len: {}", events.len());
@@ -83,8 +74,7 @@ fn init_defaults_balance_to_zero() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     assert_eq!(client.balance(), 0);
 }
 
@@ -116,16 +106,7 @@ fn init_succeeds_when_onchain_usdc_balance_covers_initial_balance() {
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
 
-    let revenue_pool = Address::generate(&env);
-    let meta = client.init(
-        &owner,
-        &usdc,
-        &Some(400),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    let meta = client.init(&owner, &usdc, &Some(400), &None, &None, &None, &None);
 
     assert_eq!(meta.balance, 400);
     assert_eq!(client.balance(), 400);
@@ -142,16 +123,7 @@ fn init_fails_when_initial_balance_exceeds_onchain_usdc_balance() {
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 99);
 
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 }
 
 #[test]
@@ -163,16 +135,7 @@ fn double_init_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let result = client.try_init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     assert!(result.is_err(), "expected error on second init");
@@ -191,16 +154,7 @@ fn get_meta_returns_correct_state() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
 
     let meta = client.get_meta();
     assert_eq!(meta.balance, 500);
@@ -228,16 +182,7 @@ fn get_admin_returns_owner_after_init() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     assert_eq!(client.get_admin(), owner);
 }
@@ -252,16 +197,7 @@ fn set_admin_two_step_succeeds() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.set_admin(&owner, &new_admin);
     assert_eq!(client.get_admin(), owner); // Still old admin
@@ -281,16 +217,7 @@ fn set_admin_unauthorized_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let result = client.try_set_admin(&intruder, &new_admin);
     assert!(
@@ -312,8 +239,7 @@ fn owner_can_deposit() {
     let (vault_address, client) = create_vault(&env);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     usdc_admin.mint(&owner, &500);
     usdc_client.approve(&owner, &vault_address, &500, &1000);
@@ -361,16 +287,7 @@ fn allowed_depositor_can_deposit() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
 
     usdc_admin.mint(&depositor, &200);
@@ -392,16 +309,7 @@ fn unauthorized_address_cannot_deposit() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.deposit(&unauthorized, &50);
 }
@@ -416,16 +324,7 @@ fn deposit_zero_panics() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.deposit(&owner, &0);
 }
 
@@ -439,16 +338,7 @@ fn deposit_negative_panics() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.deposit(&owner, &-50);
 }
 
@@ -498,8 +388,7 @@ fn deposit_paused_fails() {
     let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     client.pause(&owner);
     assert!(client.is_paused());
@@ -532,16 +421,7 @@ fn owner_can_set_and_clear_allowed_depositor() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     // Set depositor
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
@@ -571,19 +451,13 @@ fn set_allowed_depositor_duplicate_is_ignored() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
-    client.set_allowed_depositor(&owner, &Some(depositor.clone())); // duplicate â€” should be a no-op
+    client.set_allowed_depositor(&owner, &Some(depositor.clone())); // duplicate should be a no-op
+
+    let list = client.get_allowed_depositors();
+    assert_eq!(list.len(), 1);
 
     // depositor can still deposit exactly once (list not doubled)
     usdc_admin.mint(&depositor, &50);
@@ -603,16 +477,7 @@ fn non_owner_cannot_set_allowed_depositor() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.set_allowed_depositor(&non_owner, &Some(depositor));
 }
 
@@ -627,16 +492,7 @@ fn deposit_after_depositor_cleared_is_rejected() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
     client.set_allowed_depositor(&owner, &None);
 
@@ -658,8 +514,7 @@ fn pause_unpause_admin_only() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     // intruder fails
     let res = client.try_pause(&intruder);
@@ -686,8 +541,7 @@ fn pause_emits_event() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     client.pause(&owner);
     let events = env.events().all();
@@ -723,16 +577,7 @@ fn set_authorized_caller_sets_and_emits_event() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 200);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(200),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(200), &None, &None, &None, &None);
 
     client.set_authorized_caller(&new_caller);
 
@@ -762,16 +607,7 @@ fn deduct_reduces_balance() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 300);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(300),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
 
     let returned = client.deduct(&caller, &50, &None);
     assert_eq!(returned, 250);
@@ -788,16 +624,7 @@ fn deduct_with_request_id() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
 
     let remaining = client.deduct(&caller, &100, &Some(Symbol::new(&env, "req123")));
     assert_eq!(remaining, 900);
@@ -813,16 +640,7 @@ fn deduct_insufficient_balance_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 10);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(10),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(10), &None, &None, &None, &None);
 
     let result = client.try_deduct(&caller, &100, &None);
     assert!(result.is_err(), "expected error for insufficient balance");
@@ -838,16 +656,7 @@ fn deduct_exact_balance_succeeds() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 75);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(75),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(75), &None, &None, &None, &None);
 
     let remaining = client.deduct(&caller, &75, &None);
     assert_eq!(remaining, 0);
@@ -864,16 +673,7 @@ fn deduct_event_contains_request_id() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
 
     let request_id = Symbol::new(&env, "api_call_42");
     client.deduct(&caller, &150, &Some(request_id.clone()));
@@ -904,16 +704,7 @@ fn deduct_event_no_request_id_uses_empty_symbol() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 300);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(300),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
     client.deduct(&caller, &100, &None);
 
     let events = env.events().all();
@@ -937,16 +728,7 @@ fn deduct_zero_panics() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     client.deduct(&caller, &0, &None);
 }
 
@@ -961,16 +743,7 @@ fn deduct_negative_panics() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.deduct(&caller, &-50, &None);
 }
 
@@ -985,16 +758,7 @@ fn deduct_exceeds_balance_panics() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 50);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(50),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(50), &None, &None, &None, &None);
     client.deduct(&caller, &100, &None);
 }
 
@@ -1008,16 +772,7 @@ fn balance_unchanged_after_failed_deduct() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let _ = client.try_deduct(&caller, &200, &None);
     assert_eq!(client.balance(), 100);
@@ -1037,16 +792,7 @@ fn batch_deduct_multiple_items() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
 
     let items = soroban_sdk::vec![
         &env,
@@ -1070,7 +816,6 @@ fn batch_deduct_multiple_items() {
 }
 
 #[test]
-#[ignore] // Pre-existing test issue with event conversion - not related to routing feature
 fn batch_deduct_events_contain_request_ids() {
     let env = Env::default();
     let owner = Address::generate(&env);
@@ -1080,16 +825,7 @@ fn batch_deduct_events_contain_request_ids() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
 
     let rid_a = Symbol::new(&env, "batch_a");
     let rid_b = Symbol::new(&env, "batch_b");
@@ -1133,16 +869,7 @@ fn batch_deduct_insufficient_balance_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let items = soroban_sdk::vec![
         &env,
@@ -1172,16 +899,7 @@ fn batch_deduct_empty_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let items: soroban_sdk::Vec<DeductItem> = soroban_sdk::vec![&env];
     let result = client.try_batch_deduct(&caller, &items);
@@ -1198,16 +916,7 @@ fn batch_deduct_zero_amount_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let items = soroban_sdk::vec![
         &env,
@@ -1253,16 +962,7 @@ fn batch_deduct_fail_mid_batch_leaves_balance_unchanged() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let items = soroban_sdk::vec![
         &env,
@@ -1294,16 +994,7 @@ fn withdraw_reduces_balance() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
 
     let remaining = client.withdraw(&200);
     assert_eq!(remaining, 300);
@@ -1319,16 +1010,7 @@ fn withdraw_full_balance_succeeds() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
 
     let remaining = client.withdraw(&1000);
     assert_eq!(remaining, 0);
@@ -1344,16 +1026,7 @@ fn withdraw_insufficient_balance_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let result = client.try_withdraw(&500);
     assert!(result.is_err(), "expected error for insufficient balance");
@@ -1368,16 +1041,7 @@ fn withdraw_zero_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let result = client.try_withdraw(&0);
     assert!(result.is_err(), "expected error for zero amount");
@@ -1393,16 +1057,7 @@ fn withdraw_to_reduces_balance() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
 
     let remaining = client.withdraw_to(&recipient, &150);
     assert_eq!(remaining, 350);
@@ -1420,16 +1075,7 @@ fn withdraw_unauthorized_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &None);
 
     // Reset auths to test requirement without mock_all_auths bypassing it
     env.set_auths(&[]);
@@ -1447,16 +1093,7 @@ fn withdraw_to_insufficient_balance_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let result = client.try_withdraw_to(&recipient, &500);
     assert!(result.is_err(), "expected error for insufficient balance");
@@ -1476,16 +1113,7 @@ fn transfer_ownership_two_step_succeeds() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.transfer_ownership(&new_owner);
     let meta = client.get_meta();
@@ -1506,16 +1134,7 @@ fn transfer_ownership_emits_events() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.transfer_ownership(&new_owner);
 
     let events = env.events().all();
@@ -1562,16 +1181,7 @@ fn transfer_ownership_same_address_fails() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.transfer_ownership(&owner);
 }
 
@@ -1658,8 +1268,7 @@ fn set_and_retrieve_metadata() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-001");
     let metadata = String::from_str(&env, "QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco");
@@ -1679,8 +1288,7 @@ fn set_metadata_emits_event() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-002");
     let metadata = String::from_str(
@@ -1716,8 +1324,7 @@ fn update_metadata_and_verify() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-003");
     let old_metadata = String::from_str(&env, "QmOldMetadata123");
@@ -1739,8 +1346,7 @@ fn update_metadata_emits_event() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-004");
     let old_metadata = String::from_str(&env, "https://example.com/old.json");
@@ -1777,8 +1383,7 @@ fn update_metadata_without_existing_uses_empty_old() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-006");
     let new_metadata = String::from_str(&env, "QmNewMetadataOnly");
@@ -1803,8 +1408,7 @@ fn unauthorized_cannot_set_metadata() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-005");
     let metadata = String::from_str(&env, "QmSomeMetadata");
@@ -1819,8 +1423,7 @@ fn set_metadata_max_length_succeeds() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "a".repeat(64).as_str());
     let metadata = String::from_str(&env, "b".repeat(256).as_str());
@@ -1838,8 +1441,7 @@ fn set_metadata_exceeds_length_panics() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "off-1");
     let metadata = String::from_str(&env, "b".repeat(257).as_str());
@@ -1856,8 +1458,7 @@ fn set_offering_id_exceeds_length_panics() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "a".repeat(65).as_str());
     let metadata = String::from_str(&env, "meta");
@@ -1873,8 +1474,7 @@ fn update_metadata_max_length_succeeds() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "offering-update");
     let metadata = String::from_str(&env, "b".repeat(256).as_str());
@@ -1893,8 +1493,7 @@ fn metadata_remains_after_ownership_transfer() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     let offering_id = String::from_str(&env, "off-transfer");
     let metadata = String::from_str(&env, "ipfs://cid123");
@@ -1936,18 +1535,9 @@ fn vault_full_lifecycle() {
 
     env.mock_all_auths();
 
-    // Init with 500 balance, min_deposit = 10, and revenue_pool for routing
-    let revenue_pool = Address::generate(&env);
+    // Init with 500 balance, min_deposit = 10
     fund_vault(&usdc_admin, &vault_address, 500);
-    let meta = client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &Some(10),
-        &Some(revenue_pool.clone()),
-        &None,
-    );
+    let meta = client.init(&owner, &usdc, &Some(500), &None, &Some(10), &None, &None);
     assert_eq!(meta.balance, 500);
     assert_eq!(meta.owner, owner);
     assert_eq!(client.balance(), 500);
@@ -2178,8 +1768,7 @@ fn set_revenue_pool_stores_and_get_returns_address() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_revenue_pool(&owner, &Some(revenue_pool.clone()));
 
     assert_eq!(client.get_revenue_pool(), Some(revenue_pool));
@@ -2235,8 +1824,7 @@ fn set_revenue_pool_unauthorized_panics() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_revenue_pool(&attacker, &Some(revenue_pool));
 }
 
@@ -2264,8 +1852,7 @@ fn get_revenue_pool_returns_correct_after_update() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     // Set first revenue pool
     client.set_revenue_pool(&owner, &Some(pool1.clone()));
@@ -2412,8 +1999,7 @@ fn get_revenue_pool_after_multiple_sequential_updates() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     // Multiple sequential updates
     client.set_revenue_pool(&owner, &Some(pool1.clone()));
@@ -2465,8 +2051,7 @@ fn set_revenue_pool_emits_event_on_set() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_revenue_pool(&owner, &Some(revenue_pool.clone()));
 
     let events = env.events().all();
@@ -2516,8 +2101,7 @@ fn set_settlement_stores_and_get_returns_address() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_settlement(&owner, &settlement);
 
     assert_eq!(client.get_settlement(), settlement);
@@ -2534,8 +2118,7 @@ fn set_settlement_unauthorized_panics() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_settlement(&attacker, &settlement);
 }
 
@@ -2549,8 +2132,7 @@ fn get_settlement_before_set_panics() {
 
     env.mock_all_auths();
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.get_settlement();
 }
 
@@ -2565,8 +2147,7 @@ fn get_settlement_returns_correct_after_update() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     // Set first settlement address
     client.set_settlement(&owner, &settlement1);
@@ -2627,8 +2208,7 @@ fn get_settlement_no_mutation_on_multiple_calls() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_settlement(&owner, &settlement);
 
     let initial_balance = client.balance();
@@ -2643,304 +2223,6 @@ fn get_settlement_no_mutation_on_multiple_calls() {
     assert_eq!(client.balance(), initial_balance);
 }
 
-// ---------------------------------------------------------------------------
-// Routing configuration and validation tests
-// ---------------------------------------------------------------------------
-
-#[test]
-#[should_panic(expected = "routing not configured")]
-fn deduct_without_routing_fails() {
-    // Deduct should fail if neither settlement nor revenue_pool is configured
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let caller = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &Some(caller.clone()),
-        &None,
-        &None,
-        &None,
-    );
-
-    // No routing configured - should panic
-    client.deduct(&caller, &100, &None);
-}
-
-#[test]
-#[should_panic(expected = "routing not configured")]
-fn batch_deduct_without_routing_fails() {
-    // Batch deduct should fail if neither settlement nor revenue_pool is configured
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let caller = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &Some(caller.clone()),
-        &None,
-        &None,
-        &None,
-    );
-
-    let items = soroban_sdk::vec![
-        &env,
-        DeductItem {
-            amount: 100,
-            request_id: None,
-        },
-    ];
-
-    // No routing configured - should panic
-    client.batch_deduct(&caller, &items);
-}
-
-#[test]
-#[should_panic(expected = "revenue_pool cannot be vault address")]
-fn set_revenue_pool_to_vault_address_fails() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, _) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
-
-    // Try to set revenue_pool to vault's own address
-    client.set_revenue_pool(&owner, &Some(vault_address));
-}
-
-#[test]
-#[should_panic(expected = "settlement cannot be vault address")]
-fn set_settlement_to_vault_address_fails() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc, _, _) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
-
-    // Try to set settlement to vault's own address
-    client.set_settlement(&owner, &vault_address);
-}
-
-#[test]
-fn set_revenue_pool_emits_event() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let revenue_pool = Address::generate(&env);
-    let (_, client) = create_vault(&env);
-    let (usdc, _, _) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
-    client.set_revenue_pool(&owner, &Some(revenue_pool.clone()));
-
-    let events = env.events().all();
-    let last = events.last().unwrap();
-    let topic0: Symbol = last.1.get(0).unwrap().into_val(&env);
-    assert_eq!(topic0, Symbol::new(&env, "set_revenue_pool"));
-    let data: Address = last.2.into_val(&env);
-    assert_eq!(data, revenue_pool);
-}
-
-#[test]
-fn set_settlement_emits_event() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let settlement = Address::generate(&env);
-    let (_, client) = create_vault(&env);
-    let (usdc, _, _) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
-    client.set_settlement(&owner, &settlement);
-
-    let events = env.events().all();
-    let last = events.last().unwrap();
-    let topic0: Symbol = last.1.get(0).unwrap().into_val(&env);
-    assert_eq!(topic0, Symbol::new(&env, "set_settlement"));
-    let data: Address = last.2.into_val(&env);
-    assert_eq!(data, settlement);
-}
-
-#[test]
-fn routing_prioritizes_settlement_over_revenue_pool() {
-    // When both are set, settlement should receive funds
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let caller = Address::generate(&env);
-    let settlement = Address::generate(&env);
-    let revenue_pool = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(
-        &owner,
-        &usdc_address,
-        &Some(1000),
-        &Some(caller.clone()),
-        &None,
-        &Some(revenue_pool.clone()),
-        &None,
-    );
-    client.set_settlement(&owner, &settlement);
-
-    client.deduct(&caller, &300, &None);
-
-    // Settlement gets the funds, revenue_pool gets nothing
-    assert_eq!(usdc_client.balance(&settlement), 300);
-    assert_eq!(usdc_client.balance(&revenue_pool), 0);
-    assert_eq!(client.balance(), 700);
-}
-
-#[test]
-fn routing_uses_revenue_pool_when_settlement_unset() {
-    // When only revenue_pool is set, it should receive funds
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let caller = Address::generate(&env);
-    let revenue_pool = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(
-        &owner,
-        &usdc_address,
-        &Some(1000),
-        &Some(caller.clone()),
-        &None,
-        &Some(revenue_pool.clone()),
-        &None,
-    );
-
-    client.deduct(&caller, &250, &None);
-
-    // Revenue pool gets the funds
-    assert_eq!(usdc_client.balance(&revenue_pool), 250);
-    assert_eq!(client.balance(), 750);
-}
-
-#[test]
-fn routing_allows_multiple_sequential_updates() {
-    // Test reconfiguration after initial set
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let caller = Address::generate(&env);
-    let settlement1 = Address::generate(&env);
-    let settlement2 = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(
-        &owner,
-        &usdc_address,
-        &Some(1000),
-        &Some(caller.clone()),
-        &None,
-        &None,
-        &None,
-    );
-
-    // Set first settlement
-    client.set_settlement(&owner, &settlement1);
-    client.deduct(&caller, &100, &None);
-    assert_eq!(usdc_client.balance(&settlement1), 100);
-
-    // Update to second settlement
-    client.set_settlement(&owner, &settlement2);
-    client.deduct(&caller, &200, &None);
-    assert_eq!(usdc_client.balance(&settlement1), 100); // unchanged
-    assert_eq!(usdc_client.balance(&settlement2), 200); // new routing
-}
-
-#[test]
-#[should_panic(expected = "unauthorized: caller is not admin")]
-fn set_revenue_pool_unauthorized_fails() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let attacker = Address::generate(&env);
-    let revenue_pool = Address::generate(&env);
-    let (_, client) = create_vault(&env);
-    let (usdc, _, _) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
-    client.set_revenue_pool(&attacker, &Some(revenue_pool));
-}
-
-#[test]
-#[should_panic(expected = "unauthorized: caller is not admin")]
-fn set_settlement_unauthorized_fails() {
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let attacker = Address::generate(&env);
-    let settlement = Address::generate(&env);
-    let (_, client) = create_vault(&env);
-    let (usdc, _, _) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
-    client.set_settlement(&attacker, &settlement);
-}
-
-#[test]
-fn routing_with_same_address_for_both_roles() {
-    // Allow same address for both settlement and revenue_pool (edge case)
-    let env = Env::default();
-    let owner = Address::generate(&env);
-    let caller = Address::generate(&env);
-    let shared_address = Address::generate(&env);
-    let (vault_address, client) = create_vault(&env);
-    let (usdc_address, usdc_client, usdc_admin) = create_usdc(&env, &owner);
-
-    env.mock_all_auths();
-    fund_vault(&usdc_admin, &vault_address, 1000);
-    client.init(
-        &owner,
-        &usdc_address,
-        &Some(1000),
-        &Some(caller.clone()),
-        &None,
-        &None,
-        &None,
-    );
-
-    // Set both to same address
-    client.set_revenue_pool(&owner, &Some(shared_address.clone()));
-    client.set_settlement(&owner, &shared_address);
-
-    // Settlement takes priority
-    client.deduct(&caller, &150, &None);
-    assert_eq!(usdc_client.balance(&shared_address), 150);
-    assert_eq!(client.balance(), 850);
-}
-
 #[test]
 fn test_clear_allowed_depositors() {
     let env = Env::default();
@@ -2950,8 +2232,7 @@ fn test_clear_allowed_depositors() {
     let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
     client.set_allowed_depositor(&owner, &None);
@@ -2971,8 +2252,7 @@ fn test_set_authorized_caller() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
 
     client.set_authorized_caller(&auth_caller);
     let meta = client.get_meta();
@@ -3058,16 +2338,7 @@ fn deduct_to_zero_succeeds() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
 
     assert_eq!(client.deduct(&owner, &500, &None), 0);
 }
@@ -3081,18 +2352,48 @@ fn withdraw_to_zero_succeeds() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 300);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(300),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
 
     assert_eq!(client.withdraw(&300), 0);
+}
+
+#[test]
+fn withdraw_near_i128_max_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    let initial: i128 = i128::MAX - 100;
+    fund_vault(&usdc_admin, &vault_address, initial);
+    client.init(&owner, &usdc, &Some(initial), &None, &None, &None, &None);
+
+    let remaining = client.withdraw(&(initial - 1));
+    assert_eq!(remaining, 1);
+}
+
+#[test]
+fn batch_deduct_to_zero_succeeds() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (vault_address, client) = create_vault(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+
+    env.mock_all_auths();
+    fund_vault(&usdc_admin, &vault_address, 0);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+    usdc_admin.mint(&owner, &600);
+    usdc_client.approve(&owner, &vault_address, &600, &1000);
+    client.deposit(&owner, &600);
+
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem { amount: 200, request_id: None },
+        DeductItem { amount: 200, request_id: None },
+        DeductItem { amount: 200, request_id: None },
+    ];
+    assert_eq!(client.batch_deduct(&owner, &items), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -3110,16 +2411,7 @@ fn clear_allowed_depositors_removes_all() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.set_allowed_depositor(&owner, &Some(d1.clone()));
     client.set_allowed_depositor(&owner, &Some(d2.clone()));
@@ -3139,8 +2431,7 @@ fn clear_allowed_depositors_on_empty_is_noop() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     // Must not panic on empty list.
     client.clear_allowed_depositors(&owner);
     assert_eq!(client.get_allowed_depositors().len(), 0);
@@ -3157,16 +2448,7 @@ fn non_owner_cannot_set_allowed_depositor_issue108() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     let result = client.try_set_allowed_depositor(&attacker, &Some(depositor.clone()));
     assert!(result.is_err(), "non-owner must not mutate allowlist");
@@ -3183,16 +2465,7 @@ fn non_owner_cannot_clear_allowed_depositors() {
 
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
 
     client.set_allowed_depositor(&owner, &Some(depositor.clone()));
     let result = client.try_clear_allowed_depositors(&attacker);
@@ -3246,8 +2519,7 @@ fn pause_when_already_paused_fails() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.pause(&owner);
     client.pause(&owner); // second pause must panic
 }
@@ -3260,8 +2532,7 @@ fn unpause_when_not_paused_fails() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.unpause(&owner); // not paused — must panic
 }
 
@@ -3274,8 +2545,7 @@ fn pause_by_unauthorized_fails() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.pause(&attacker);
 }
 
@@ -3288,8 +2558,7 @@ fn unpause_by_unauthorized_fails() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.pause(&owner);
     client.unpause(&attacker);
 }
@@ -3301,8 +2570,7 @@ fn owner_can_pause_and_unpause() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     assert!(!client.is_paused());
     client.pause(&owner);
     assert!(client.is_paused());
@@ -3318,8 +2586,7 @@ fn admin_can_pause_and_unpause() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_admin(&owner, &new_admin);
     client.accept_admin();
     client.pause(&new_admin);
@@ -3337,16 +2604,7 @@ fn deduct_while_paused_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     client.pause(&owner);
     client.deduct(&owner, &100, &None);
 }
@@ -3360,23 +2618,14 @@ fn batch_deduct_while_paused_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     client.pause(&owner);
     let items = soroban_sdk::vec![
         &env,
         DeductItem {
             amount: 100,
-            request_id: None
-        }
+            request_id: None,
+        },
     ];
     client.batch_deduct(&owner, &items);
 }
@@ -3393,16 +2642,7 @@ fn deduct_unauthorized_caller_fails() {
     fund_vault(&usdc_admin, &vault_address, 500);
     // init with an authorized_caller so the None branch is not taken
     let auth = Address::generate(&env);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &Some(auth),
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &Some(auth), &None, &None, &None);
     client.deduct(&attacker, &100, &None);
 }
 
@@ -3417,22 +2657,13 @@ fn batch_deduct_unauthorized_caller_fails() {
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
     let auth = Address::generate(&env);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &Some(auth),
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(500), &Some(auth), &None, &None, &None);
     let items = soroban_sdk::vec![
         &env,
         DeductItem {
             amount: 100,
-            request_id: None
-        }
+            request_id: None,
+        },
     ];
     client.batch_deduct(&attacker, &items);
 }
@@ -3446,16 +2677,7 @@ fn deduct_exceeds_max_deduct_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &Some(50),
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &Some(50));
     client.deduct(&owner, &100, &None); // 100 > max_deduct(50)
 }
 
@@ -3468,22 +2690,13 @@ fn batch_deduct_item_exceeds_max_deduct_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(1000),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &Some(50),
-    );
+    client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &Some(50));
     let items = soroban_sdk::vec![
         &env,
         DeductItem {
             amount: 100,
-            request_id: None
-        }
+            request_id: None,
+        },
     ];
     client.batch_deduct(&owner, &items);
 }
@@ -3498,16 +2711,7 @@ fn distribute_negative_amount_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(0),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(0), &None, &None, &None, &None);
     client.distribute(&owner, &dev, &-1);
 }
 
@@ -3519,8 +2723,7 @@ fn accept_admin_without_pending_fails() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.accept_admin();
 }
 
@@ -3532,8 +2735,7 @@ fn accept_ownership_without_pending_fails() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.accept_ownership();
 }
 
@@ -3546,16 +2748,7 @@ fn withdraw_negative_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.withdraw(&-1);
 }
 
@@ -3569,40 +2762,32 @@ fn withdraw_to_negative_fails() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 100);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(100),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(100), &None, &None, &None, &None);
     client.withdraw_to(&recipient, &-1);
 }
 
 #[test]
-#[should_panic(expected = "routing not configured")]
-fn deduct_no_routing_fails() {
-    // When neither settlement nor revenue_pool is configured, deduct should fail
+fn deduct_no_routing_stays_in_vault() {
+    // When neither settlement nor revenue_pool is configured, USDC stays in vault.
     let env = Env::default();
     let owner = Address::generate(&env);
     let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
     client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     client.deduct(&owner, &200, &None);
+    assert_eq!(client.balance(), 300);
+    // USDC stays in vault contract
+    assert_eq!(usdc_client.balance(&vault_address), 500);
 }
 
 #[test]
-#[should_panic(expected = "routing not configured")]
-fn batch_deduct_no_routing_fails() {
+fn batch_deduct_no_routing_stays_in_vault() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let (vault_address, client) = create_vault(&env);
-    let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
     client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
@@ -3610,14 +2795,16 @@ fn batch_deduct_no_routing_fails() {
         &env,
         DeductItem {
             amount: 100,
-            request_id: None
+            request_id: None,
         },
         DeductItem {
             amount: 50,
-            request_id: None
+            request_id: None,
         },
     ];
     client.batch_deduct(&owner, &items);
+    assert_eq!(client.balance(), 350);
+    assert_eq!(usdc_client.balance(&vault_address), 500);
 }
 
 #[test]
@@ -3628,16 +2815,7 @@ fn withdraw_emits_event() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 300);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(300),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
     client.withdraw(&100);
     let events = env.events().all();
     let ev = events
@@ -3663,16 +2841,7 @@ fn withdraw_to_emits_event() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 300);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(300),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
     client.withdraw_to(&recipient, &150);
     let events = env.events().all();
     let ev = events
@@ -3698,16 +2867,7 @@ fn distribute_emits_event() {
     let (usdc, _, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(0),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &None,
-    );
+    client.init(&owner, &usdc, &Some(0), &None, &None, &None, &None);
     client.distribute(&owner, &dev, &200);
     let events = env.events().all();
     let ev = events
@@ -3732,8 +2892,7 @@ fn get_allowed_depositors_returns_list() {
     let (_, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.set_allowed_depositor(&owner, &Some(d1));
     client.set_allowed_depositor(&owner, &Some(d2));
     let list = client.get_allowed_depositors();
@@ -3747,8 +2906,7 @@ fn vault_unpaused_event_emitted() {
     let (vault_address, client) = create_vault(&env);
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     client.pause(&owner);
     client.unpause(&owner);
     let events = env.events().all();
@@ -3772,7 +2930,7 @@ fn vault_unpaused_event_emitted() {
 //   1. VaultMeta.balance >= 0 after every operation.
 //   2. Local simulator tracks the same balance as the contract at each step.
 //   3. batch_deduct is atomic: a failing batch leaves balance unchanged.
-//   4. pause blocks deposits but not deductions; unpause restores deposits.
+//   4. pause blocks deposits and deductions; unpause restores both.
 //   5. No single deduct/batch item may exceed max_deduct.
 //
 // Seeds are fixed so runs are deterministic and reproducible in CI.
@@ -3799,14 +2957,13 @@ mod fuzz {
 
         // Pre-fund vault so initial_balance is valid.
         usdc_admin.mint(&vault_addr, &initial);
-        let revenue_pool = Address::generate(&env);
         client.init(
             &owner,
             &usdc_addr,
             &Some(initial),
             &None,
-            &Some(1),            // min_deposit = 1
-            &Some(revenue_pool), // revenue_pool for routing
+            &Some(1), // min_deposit = 1
+            &None,
             &Some(max_deduct_val),
         );
 
@@ -3819,6 +2976,11 @@ mod fuzz {
         let mut rng = StdRng::seed_from_u64(seed);
         let mut sim: i128 = initial;
         let mut paused = false;
+        let op_cap: i128 = if max_deduct_val > 10_000 {
+            10_000
+        } else {
+            max_deduct_val
+        };
 
         for _ in 0..steps {
             // Pick an operation: 0=deposit, 1=deduct, 2=batch_deduct, 3=toggle_pause
@@ -3849,7 +3011,7 @@ mod fuzz {
                         sim -= amount;
                         client.deduct(&caller, &amount, &None);
                     } else {
-                        // must fail — balance unchanged
+                        // must fail — balance unchanged (paused or insufficient)
                         assert!(client.try_deduct(&caller, &amount, &None).is_err());
                     }
                 }
@@ -3862,7 +3024,7 @@ mod fuzz {
                     let mut batch_total: i128 = 0;
                     let mut valid = true;
                     for _ in 0..n {
-                        let amt: i128 = rng.gen_range(1..=max_deduct_val);
+                        let amt: i128 = rng.gen_range(1..=op_cap);
                         batch_total = match batch_total.checked_add(amt) {
                             Some(v) => v,
                             None => {
@@ -3888,7 +3050,7 @@ mod fuzz {
                         sim -= batch_total;
                         client.batch_deduct(&caller, &items);
                     } else {
-                        // batch must fail atomically — balance unchanged
+                        // batch must fail atomically — balance unchanged (paused, overflow, or insufficient)
                         let before = client.balance();
                         let _ = client.try_batch_deduct(&caller, &items);
                         assert_eq!(
@@ -3974,7 +3136,7 @@ mod fuzz {
             &Some(300),
             &None,
             &None,
-            &Some(Address::generate(&env)),
+            &None,
             &Some(200),
         );
 
@@ -4013,7 +3175,6 @@ mod fuzz {
         let (usdc_addr, _, usdc_admin) = create_usdc(&env, &owner);
         let (vault_addr, client) = create_vault(&env);
         let max_d: i128 = 100;
-        let revenue_pool = Address::generate(&env);
 
         usdc_admin.mint(&vault_addr, &10_000);
         client.init(
@@ -4022,7 +3183,7 @@ mod fuzz {
             &Some(10_000),
             &None,
             &None,
-            &Some(revenue_pool),
+            &None,
             &Some(max_d),
         );
 
@@ -4039,8 +3200,8 @@ mod fuzz {
                 &env,
                 DeductItem {
                     amount: amt,
-                    request_id: None
-                }
+                    request_id: None,
+                },
             ];
             if exceed {
                 assert!(
@@ -4149,8 +3310,7 @@ fn init_default_min_deposit_is_zero() {
     let (usdc, _, _) = create_usdc(&env, &owner);
 
     env.mock_all_auths();
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     let meta = client.get_meta();
     assert_eq!(meta.min_deposit, 0);
 }
@@ -4205,16 +3365,7 @@ fn deduct_equal_to_max_deduct_succeeds() {
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
     // max_deduct = 100, deposit 200 so balance is sufficient
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &Some(100),
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &Some(100));
     usdc_admin.mint(&owner, &200);
     usdc_client.approve(&owner, &vault_address, &200, &1000);
     client.deposit(&owner, &200);
@@ -4232,16 +3383,7 @@ fn deduct_above_max_deduct_panics() {
     let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 500);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &Some(500),
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &Some(100),
-    );
+    client.init(&owner, &usdc, &Some(500), &None, &None, &None, &Some(100));
     usdc_admin.mint(&owner, &200);
     usdc_client.approve(&owner, &vault_address, &200, &1000);
     client.deposit(&owner, &200);
@@ -4258,8 +3400,7 @@ fn deduct_default_cap_is_i128_max() {
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 0);
     // no max_deduct supplied — default cap (i128::MAX) applies
-    let rp = Address::generate(&env);
-    client.init(&owner, &usdc, &None, &None, &None, &Some(rp), &None);
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
     usdc_admin.mint(&owner, &1_000_000);
     usdc_client.approve(&owner, &vault_address, &1_000_000, &1000);
     client.deposit(&owner, &1_000_000);
@@ -4276,17 +3417,8 @@ fn batch_deduct_each_item_constrained_by_max_deduct() {
     let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 0);
-    let revenue_pool = Address::generate(&env);
     // max_deduct = 50
-    client.init(
-        &owner,
-        &usdc,
-        &None,
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &Some(50),
-    );
+    client.init(&owner, &usdc, &None, &None, &None, &None, &Some(50));
     usdc_admin.mint(&owner, &300);
     usdc_client.approve(&owner, &vault_address, &300, &1000);
     client.deposit(&owner, &300);
@@ -4319,16 +3451,7 @@ fn batch_deduct_one_item_above_max_deduct_panics() {
     let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 0);
-    let revenue_pool = Address::generate(&env);
-    client.init(
-        &owner,
-        &usdc,
-        &None,
-        &None,
-        &None,
-        &Some(revenue_pool),
-        &Some(50),
-    );
+    client.init(&owner, &usdc, &None, &None, &None, &None, &Some(50));
     usdc_admin.mint(&owner, &300);
     usdc_client.approve(&owner, &vault_address, &300, &1000);
     client.deposit(&owner, &300);
