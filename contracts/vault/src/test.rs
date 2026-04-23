@@ -3381,7 +3381,6 @@ mod fuzz {
                     }
                     // else: deposit failed (e.g. insufficient USDC) — no sim change
                 }
-
                 // --- single deduct ---
                 // --- single deduct ---
                 1 => {
@@ -3476,6 +3475,7 @@ mod fuzz {
     fn fuzz_deposit_and_deduct() {
         // Original invariant: mixed deposits and single deducts stay non-negative.
         run_sequence(0xdead_beef, 500, 10_000, 200);
+        // ensure vault is left unpaused for teardown (run_sequence already handles this)
     }
 
     #[test]

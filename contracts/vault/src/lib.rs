@@ -18,10 +18,11 @@ pub struct VaultMeta {
     pub min_deposit: i128,
 }
 
+/// Canonical storage keys for Vault contract.
+/// Eliminates duplication and ensures audit clarity.
 #[contracttype]
 pub enum StorageKey {
     Meta,
-    AllowedDepositors,
     Admin,
     UsdcToken,
     Settlement,
@@ -117,6 +118,17 @@ impl CalloraVault {
         list.contains(&caller)
     }
 
+    fn migrate(env: &Env) {
+        let inst = env.storage().instance();
+
+        // Ensure Admin fallback exists
+        if !inst.has(&StorageKey::Admin) {
+            if let Some(meta) = inst.get::<_, VaultMeta>(&StorageKey::Meta) {
+                inst.set(&StorageKey::Admin, &meta.owner);
+            }
+        }
+    }
+
     pub fn get_admin(env: Env) -> Address {
         env.storage()
             .instance()
@@ -190,6 +202,7 @@ impl CalloraVault {
     pub fn set_allowed_depositor(env: Env, caller: Address, depositor: Option<Address>) {
         caller.require_auth();
         Self::require_owner(env.clone(), caller);
+
         match depositor {
             Some(d) => {
                 let mut list: Vec<Address> = env
@@ -197,17 +210,16 @@ impl CalloraVault {
                     .instance()
                     .get(&StorageKey::DepositorList)
                     .unwrap_or(Vec::new(&env));
+
                 if !list.contains(&d) {
                     list.push_back(d);
                 }
+
                 env.storage()
                     .instance()
                     .set(&StorageKey::DepositorList, &list);
             }
             None => {
-                env.storage()
-                    .instance()
-                    .remove(&StorageKey::AllowedDepositors);
                 env.storage()
                     .instance()
                     .set(&StorageKey::DepositorList, &Vec::<Address>::new(&env));
@@ -218,9 +230,6 @@ impl CalloraVault {
     pub fn clear_allowed_depositors(env: Env, caller: Address) {
         caller.require_auth();
         Self::require_owner(env.clone(), caller);
-        env.storage()
-            .instance()
-            .remove(&StorageKey::AllowedDepositors);
         env.storage()
             .instance()
             .set(&StorageKey::DepositorList, &Vec::<Address>::new(&env));
@@ -362,7 +371,7 @@ impl CalloraVault {
         meta.balance = meta.balance.checked_sub(amount).unwrap_or_else(|| panic!("balance underflow"));
         env.storage().instance().set(&StorageKey::Meta, &meta);
         let inst = env.storage().instance();
-        if let Some(s) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
+        if let Some(s) = inst.get(&StorageKey::Settlement) {
             let ut: Address = inst.get(&StorageKey::UsdcToken).unwrap();
             Self::transfer_funds(&env, &ut, &s, amount);
         } else if inst
@@ -380,6 +389,7 @@ impl CalloraVault {
     }
 
     pub fn batch_deduct(env: Env, caller: Address, items: Vec<DeductItem>) -> i128 {
+        Self::require_not_paused(env.clone());
         caller.require_auth();
         Self::require_not_paused(env.clone());
         let n = items.len();
@@ -413,7 +423,7 @@ impl CalloraVault {
             );
         }
         let inst = env.storage().instance();
-        if let Some(s) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
+        if let Some(s) = inst.get(&StorageKey::Settlement) {
             let ut: Address = inst.get(&StorageKey::UsdcToken).unwrap();
             Self::transfer_funds(&env, &ut, &s, total);
         } else if inst

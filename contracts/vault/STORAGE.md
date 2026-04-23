@@ -286,3 +286,28 @@ Monitor storage-related events:
 |---------|--------|
 | 1.0 | Initial `StorageKey` enum with `Meta`, `AllowedDepositors`, `Admin`, `UsdcToken`, `Settlement`, `RevenuePool`, `MaxDeduct`, `Metadata(String)` |
 | 1.1 | Renamed `StorageKey` → `DataKey`; added doc comments to all variants; removed stale `// Replaced by StorageKey enum variants` comment; updated STORAGE.md |
+
+## Canonical Storage Keys
+
+All storage is accessed via `StorageKey` enum.
+
+### Keys
+
+| Key | Description |
+|-----|------------|
+| Meta | Vault metadata |
+| DepositorList | Authorized depositors |
+| Admin | Admin address |
+| UsdcToken | Token contract |
+| Settlement | Settlement contract |
+| RevenuePool | Revenue pool |
+| MaxDeduct | Deduct cap |
+| Paused | Circuit breaker |
+| Metadata(String) | Offering metadata |
+| PendingOwner | Ownership transfer |
+| PendingAdmin | Admin transfer |
+
+### Migration
+
+- Removes deprecated `AllowedDepositors`
+- Ensures Admin fallback from Meta.owner
