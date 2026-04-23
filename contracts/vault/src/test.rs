@@ -2594,8 +2594,8 @@ fn get_allowed_depositors_returns_list() {
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
     client.init(&owner, &usdc, &None, &None, &None, &None, &None);
-    client.set_allowed_depositor(&owner, &d1);
-    client.set_allowed_depositor(&owner, &d2);
+    client.set_allowed_depositor(&owner, &Some(d1.clone()));
+    client.set_allowed_depositor(&owner, &Some(d2.clone()));
     let list = client.get_allowed_depositors();
     assert_eq!(list.len(), 2);
 }
