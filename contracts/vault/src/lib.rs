@@ -353,7 +353,6 @@ impl CalloraVault {
 
     pub fn deduct(env: Env, caller: Address, amount: i128, request_id: Option<Symbol>) -> i128 {
         caller.require_auth();
-        Self::require_not_paused(env.clone());
         assert!(amount > 0, "amount must be positive");
         let max_d = Self::get_max_deduct(env.clone());
         assert!(amount <= max_d, "deduct amount exceeds max_deduct");

@@ -65,6 +65,14 @@ Emitted on each deduction — once per `deduct()` call and once per item in `bat
 }
 ```
 
+**`request_id` encoding (indexer contract):**
+
+- **Topic is always present**: the vault always emits **exactly 3 topics** for `deduct`.
+- **No optional topic**: Soroban events do not carry an `Option` topic value; instead the vault uses a **sentinel**.
+- **Sentinel for “no request_id”**: when the input `request_id` is `None`, topic 2 is `Symbol("")` (an empty symbol).
+- **Indexer rule**: treat `Symbol("")` as “no request_id provided”.
+- **Ambiguity note**: `Some(Symbol(""))` is indistinguishable from `None` on-chain. Clients **SHOULD NOT** intentionally pass an empty symbol as a real request id.
+
 ---
 
 ### `withdraw`

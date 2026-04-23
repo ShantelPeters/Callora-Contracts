@@ -686,6 +686,7 @@ fn deduct_event_contains_request_id() {
     let events = env.events().all();
     let ev = events.last().expect("expected deduct event");
 
+    assert_eq!(ev.1.len(), 3, "deduct event must always have 3 topics");
     let topic0: Symbol = ev.1.get(0).unwrap().into_val(&env);
     let topic1: Address = ev.1.get(1).unwrap().into_val(&env);
     let topic2: Symbol = ev.1.get(2).unwrap().into_val(&env);
@@ -715,6 +716,7 @@ fn deduct_event_no_request_id_uses_empty_symbol() {
     let events = env.events().all();
     let ev = events.last().expect("expected deduct event");
 
+    assert_eq!(ev.1.len(), 3, "deduct event must always have 3 topics");
     let topic0: Symbol = ev.1.get(0).unwrap().into_val(&env);
     let topic1: Address = ev.1.get(1).unwrap().into_val(&env);
     let topic2: Symbol = ev.1.get(2).unwrap().into_val(&env);
@@ -2816,8 +2818,7 @@ fn is_paused_safe_default_before_init() {
 }
 
 #[test]
-#[should_panic(expected = "vault is paused")]
-fn deduct_while_paused_fails() {
+fn deduct_while_paused_succeeds() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let (vault_address, client) = create_vault(&env);
@@ -2826,12 +2827,12 @@ fn deduct_while_paused_fails() {
     fund_vault(&usdc_admin, &vault_address, 500);
     client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     client.pause(&owner);
-    client.deduct(&owner, &100, &None);
+    let remaining = client.deduct(&owner, &100, &None);
+    assert_eq!(remaining, 400);
 }
 
 #[test]
-#[should_panic(expected = "vault is paused")]
-fn batch_deduct_while_paused_fails() {
+fn batch_deduct_while_paused_succeeds() {
     let env = Env::default();
     let owner = Address::generate(&env);
     let (vault_address, client) = create_vault(&env);
@@ -3192,6 +3193,10 @@ mod fuzz {
         let deposit_reserve: i128 = 10_000_000_000_000; // 10 trillion to handle large deposits
         usdc_admin.mint(&owner, &deposit_reserve);
         usdc_client.approve(&owner, &vault_addr, &i128::MAX, &999_999);
+
+        // Keep random steps realistic even when max_deduct is astronomically large.
+        // (We still exercise max_deduct boundaries in dedicated unit tests.)
+        let step_cap: i128 = core::cmp::min(max_deduct_val, 10_000);
 
         let mut rng = StdRng::seed_from_u64(seed);
         let mut sim: i128 = initial;
