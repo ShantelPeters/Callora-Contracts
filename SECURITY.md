@@ -100,11 +100,20 @@ The vault performs USDC transfers to configurable counterpart addresses on every
 - **Priority rule**: when both are configured, `settlement` takes priority and
   `revenue_pool` is not used in the same deduct. This prevents "half updated"
   routing states where funds could be split unexpectedly across two recipients.
-- **Unset behavior**: if neither address is configured the deducted amount stays
-  inside the vault (balance is reduced but no token transfer occurs). This state
-  is valid and explicitly documented—no funds are lost.
-- Both addresses can only be changed by the admin in a single atomic storage
-  write, ensuring no partial update is observable by other callers.
+- **CRITICAL - Routing Required**: At least one routing address (settlement OR
+  revenue_pool) MUST be configured before any deduct operations can succeed.
+  If neither is configured, `deduct()` and `batch_deduct()` will panic with
+  `"routing not configured: set settlement or revenue_pool address"`. This
+  prevents silent fund retention and ensures explicit routing configuration.
+- **Address Validation**: Both `set_settlement()` and `set_revenue_pool()` validate
+  that the provided address is NOT the vault's own address, preventing
+  self-referential routing loops.
+- **Atomic Updates**: Each address is updated atomically in a single storage write,
+  ensuring no partial update is observable by other callers.
+- **Audit Trail**: All routing configuration changes emit events:
+  - `set_settlement(admin) → address` when setting settlement
+  - `set_revenue_pool(admin) → address` when setting revenue pool
+  - `clear_revenue_pool(admin) → ()` when clearing revenue pool
 
 ### Vault-Specific Risks
 
