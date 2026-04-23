@@ -69,7 +69,7 @@ A simple distribution contract for revenue.
 Advanced settlement with individual developer balance tracking.
 
 - `init(admin, vault_address)` — Link to the vault and set admin.
-- `receive_payment(caller, amount, to_pool, developer)` — Receive funds from vault; credit global pool or specific developer.
+- `receive_payment(caller, amount, to_pool, developer)` — Receive funds from vault; credit global pool or specific developer. `developer` must be provided if `to_pool=false`.
 - `get_developer_balance(developer)` — Check tracked balance for a specific developer.
 - `get_global_pool()` — View total accumulated pool balance.
 - `set_vault(caller, new_vault)` — Admin-only; update the linked vault address.

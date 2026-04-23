@@ -157,7 +157,7 @@ Emitted by `receive_payment()` for every inbound payment regardless of `to_pool`
 | `from_vault` | data | Address | same as topic 1 (vault/admin caller)                                   |
 | `amount`     | data | i128    | payment amount in USDC micro-units (stroops); always > 0                |
 | `to_pool`    | data | bool    | `true` → credited to global pool; `false` → credited to a developer    |
-| `developer`  | data | Option\<Address\> | `None` when `to_pool=true`; developer address when `to_pool=false` |
+| `developer`  | data | Option\<Address\> | **Required** when `to_pool=false`; `None` when `to_pool=true` |
 
 **Example — `to_pool = true` (global pool credit):**
 
