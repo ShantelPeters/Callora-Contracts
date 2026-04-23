@@ -128,7 +128,7 @@ The project enforces a **minimum of 95% line coverage** on every push via GitHub
 ```
 callora-contracts/
 ├── .github/workflows/
-│   ├── ci.yml              # CI: fmt, clippy, test, WASM build
+│   ├── ci.yml              # CI: workspace fmt gate, clippy, test, WASM build
 │   └── coverage.yml        # CI: enforces 95% coverage on every push
 ├── contracts/
 │   ├── vault/              # Primary storage and metering
