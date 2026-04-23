@@ -20,7 +20,7 @@ pub struct VaultMeta {
 
 #[contracttype]
 pub enum StorageKey {
-    Meta,
+    MetaKey,
     AllowedDepositors,
     Admin,
     UsdcToken,
@@ -45,12 +45,19 @@ pub struct CalloraVault;
 #[contractimpl]
 impl CalloraVault {
     #[allow(clippy::too_many_arguments)]
-    pub fn init(env: Env, owner: Address, usdc_token: Address, initial_balance: Option<i128>,
-        authorized_caller: Option<Address>, min_deposit: Option<i128>,
-        revenue_pool: Option<Address>, max_deduct: Option<i128>) -> VaultMeta {
+    pub fn init(
+        env: Env,
+        owner: Address,
+        usdc_token: Address,
+        initial_balance: Option<i128>,
+        authorized_caller: Option<Address>,
+        min_deposit: Option<i128>,
+        revenue_pool: Option<Address>,
+        max_deduct: Option<i128>,
+    ) -> VaultMeta {
         owner.require_auth();
         let inst = env.storage().instance();
-        if inst.has(&StorageKey::Meta) {
+        if inst.has(&StorageKey::MetaKey) {
             panic!("vault already initialized");
         }
         assert!(
@@ -84,7 +91,7 @@ impl CalloraVault {
             authorized_caller,
             min_deposit: min_d,
         };
-        inst.set(&StorageKey::Meta, &meta);
+        inst.set(&StorageKey::MetaKey, &meta);
         inst.set(&StorageKey::UsdcToken, &usdc_token);
         inst.set(&StorageKey::Admin, &owner);
         if let Some(p) = revenue_pool {
@@ -110,7 +117,10 @@ impl CalloraVault {
     }
 
     pub fn get_admin(env: Env) -> Address {
-        env.storage().instance().get(&StorageKey::Admin).expect("vault not initialized")
+        env.storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .expect("vault not initialized")
     }
 
     pub fn set_admin(env: Env, caller: Address, new_admin: Address) {
@@ -165,11 +175,15 @@ impl CalloraVault {
             panic!("insufficient USDC balance");
         }
         usdc.transfer(&env.current_contract_address(), &to, &amount);
-        env.events().publish((Symbol::new(&env, "distribute"), to), amount);
+        env.events()
+            .publish((Symbol::new(&env, "distribute"), to), amount);
     }
 
     pub fn get_meta(env: Env) -> VaultMeta {
-        env.storage().instance().get(&StorageKey::Meta).unwrap_or_else(|| panic!("vault not initialized"))
+        env.storage()
+            .instance()
+            .get(&StorageKey::MetaKey)
+            .unwrap_or_else(|| panic!("vault not initialized"))
     }
 
     pub fn set_allowed_depositor(env: Env, caller: Address, depositor: Option<Address>) {
@@ -215,14 +229,17 @@ impl CalloraVault {
     }
 
     pub fn get_allowed_depositors(env: Env) -> Vec<Address> {
-        env.storage().instance().get(&StorageKey::DepositorList).unwrap_or(Vec::new(&env))
+        env.storage()
+            .instance()
+            .get(&StorageKey::DepositorList)
+            .unwrap_or(Vec::new(&env))
     }
 
     pub fn set_authorized_caller(env: Env, caller: Address) {
         let mut meta = Self::get_meta(env.clone());
         meta.owner.require_auth();
         meta.authorized_caller = Some(caller.clone());
-        env.storage().instance().set(&StorageKey::Meta, &meta);
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         env.events().publish(
             (Symbol::new(&env, "set_auth_caller"), meta.owner.clone()),
             caller,
@@ -243,15 +260,15 @@ impl CalloraVault {
         Self::require_admin_or_owner(env.clone(), &caller);
         assert!(Self::is_paused(env.clone()), "vault not paused");
         env.storage().instance().set(&StorageKey::Paused, &false);
-        env.events().publish((Symbol::new(&env, "vault_unpaused"), caller), ());
+        env.events()
+            .publish((Symbol::new(&env, "vault_unpaused"), caller), ());
     }
 
     pub fn is_paused(env: Env) -> bool {
-        env.storage().instance().get(&StorageKey::Paused).unwrap_or(false)
-    }
-
-    pub fn get_max_deduct(env: Env) -> i128 {
-        env.storage().instance().get(&StorageKey::MaxDeduct).unwrap_or(DEFAULT_MAX_DEDUCT)
+        env.storage()
+            .instance()
+            .get(&StorageKey::Paused)
+            .unwrap_or(false)
     }
 
     pub fn get_max_deduct(env: Env) -> i128 {
@@ -284,8 +301,11 @@ impl CalloraVault {
         let usdc = token::Client::new(&env, &usdc_addr);
         usdc.transfer(&caller, &env.current_contract_address(), &amount);
         let mut meta = Self::get_meta(env.clone());
-        meta.balance = meta.balance.checked_add(amount).unwrap_or_else(|| panic!("balance overflow"));
-        env.storage().instance().set(&StorageKey::Meta, &meta);
+        meta.balance = meta
+            .balance
+            .checked_add(amount)
+            .unwrap_or_else(|| panic!("balance overflow"));
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         env.events().publish(
             (Symbol::new(&env, "deposit"), caller.clone()),
             (amount, meta.balance),
@@ -308,7 +328,7 @@ impl CalloraVault {
         assert!(meta.balance >= amount, "insufficient balance");
         let mut meta = Self::get_meta(env.clone());
         meta.balance = meta.balance.checked_sub(amount).unwrap();
-        env.storage().instance().set(&StorageKey::Meta, &meta);
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         let inst = env.storage().instance();
         if let Some(s) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
             let ut: Address = inst.get(&StorageKey::UsdcToken).unwrap();
@@ -329,6 +349,7 @@ impl CalloraVault {
 
     pub fn batch_deduct(env: Env, caller: Address, items: Vec<DeductItem>) -> i128 {
         caller.require_auth();
+        Self::require_not_paused(env.clone());
         let n = items.len();
         assert!(n > 0, "batch_deduct requires at least one item");
         assert!(n <= MAX_BATCH_SIZE, "batch too large");
@@ -348,9 +369,8 @@ impl CalloraVault {
             running = running.checked_sub(item.amount).unwrap();
             total = total.checked_add(item.amount).unwrap();
         }
-        meta.balance = running;
-        env.storage().instance().set(&StorageKey::Meta, &meta);
-        let mut eb = meta.balance.checked_add(total).unwrap();
+
+        let mut eb = meta.balance;
         for item in items.iter() {
             eb = eb.checked_sub(item.amount).unwrap();
             let rid = item.request_id.clone().unwrap_or(Symbol::new(&env, ""));
@@ -359,6 +379,7 @@ impl CalloraVault {
                 (item.amount, eb),
             );
         }
+
         let inst = env.storage().instance();
         if let Some(s) = inst.get::<StorageKey, Address>(&StorageKey::Settlement) {
             let ut: Address = inst.get(&StorageKey::UsdcToken).unwrap();
@@ -369,6 +390,9 @@ impl CalloraVault {
         {
             Self::transfer_to_revenue_pool(env.clone(), total);
         }
+
+        meta.balance = running;
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         meta.balance
     }
 
@@ -406,7 +430,7 @@ impl CalloraVault {
         let mut meta = Self::get_meta(env.clone());
         let old = meta.owner.clone();
         meta.owner = pending;
-        env.storage().instance().set(&StorageKey::Meta, &meta);
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         env.storage().instance().remove(&StorageKey::PendingOwner);
         env.events().publish(
             (Symbol::new(&env, "ownership_accepted"), old, meta.owner),
@@ -427,7 +451,7 @@ impl CalloraVault {
         let usdc = token::Client::new(&env, &ua);
         usdc.transfer(&env.current_contract_address(), &meta.owner, &amount);
         meta.balance = meta.balance.checked_sub(amount).unwrap();
-        env.storage().instance().set(&StorageKey::Meta, &meta);
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         env.events().publish(
             (Symbol::new(&env, "withdraw"), meta.owner.clone()),
             (amount, meta.balance),
@@ -448,7 +472,7 @@ impl CalloraVault {
         let usdc = token::Client::new(&env, &ua);
         usdc.transfer(&env.current_contract_address(), &to, &amount);
         meta.balance = meta.balance.checked_sub(amount).unwrap();
-        env.storage().instance().set(&StorageKey::Meta, &meta);
+        env.storage().instance().set(&StorageKey::MetaKey, &meta);
         env.events().publish(
             (Symbol::new(&env, "withdraw_to"), meta.owner.clone(), to),
             (amount, meta.balance),
@@ -494,7 +518,9 @@ impl CalloraVault {
     }
 
     pub fn get_settlement(env: Env) -> Address {
-        env.storage().instance().get(&StorageKey::Settlement)
+        env.storage()
+            .instance()
+            .get(&StorageKey::Settlement)
             .unwrap_or_else(|| panic!("settlement address not set"))
     }
 
@@ -551,8 +577,13 @@ impl CalloraVault {
             .instance()
             .get(&StorageKey::Metadata(offering_id.clone()))
             .unwrap_or(String::from_str(&env, ""));
-        env.storage().instance().set(&StorageKey::Metadata(offering_id.clone()), &metadata);
-        env.events().publish((Symbol::new(&env, "metadata_updated"), offering_id, caller), (old, metadata.clone()));
+        env.storage()
+            .instance()
+            .set(&StorageKey::Metadata(offering_id.clone()), &metadata);
+        env.events().publish(
+            (Symbol::new(&env, "metadata_updated"), offering_id, caller),
+            (old, metadata.clone()),
+        );
         metadata
     }
 
@@ -576,9 +607,16 @@ impl CalloraVault {
     }
 
     fn require_admin_or_owner(env: Env, caller: &Address) {
-        let admin: Address = env.storage().instance().get(&StorageKey::Admin).expect("vault not initialized");
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .expect("vault not initialized");
         let meta = Self::get_meta(env);
-        assert!(*caller == admin || *caller == meta.owner, "unauthorized: caller is not admin or owner");
+        assert!(
+            *caller == admin || *caller == meta.owner,
+            "unauthorized: caller is not admin or owner"
+        );
     }
 }
 
