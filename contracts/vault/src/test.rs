@@ -2321,7 +2321,13 @@ fn batch_deduct_while_paused_fails() {
     fund_vault(&usdc_admin, &vault_address, 500);
     client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     client.pause(&owner);
-    let items = soroban_sdk::vec![&env, DeductItem { amount: 100, request_id: None }];
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 100,
+            request_id: None
+        }
+    ];
     client.batch_deduct(&owner, &items);
 }
 
@@ -2353,7 +2359,13 @@ fn batch_deduct_unauthorized_caller_fails() {
     fund_vault(&usdc_admin, &vault_address, 500);
     let auth = Address::generate(&env);
     client.init(&owner, &usdc, &Some(500), &Some(auth), &None, &None, &None);
-    let items = soroban_sdk::vec![&env, DeductItem { amount: 100, request_id: None }];
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 100,
+            request_id: None
+        }
+    ];
     client.batch_deduct(&attacker, &items);
 }
 
@@ -2380,7 +2392,13 @@ fn batch_deduct_item_exceeds_max_deduct_fails() {
     env.mock_all_auths();
     fund_vault(&usdc_admin, &vault_address, 1000);
     client.init(&owner, &usdc, &Some(1000), &None, &None, &None, &Some(50));
-    let items = soroban_sdk::vec![&env, DeductItem { amount: 100, request_id: None }];
+    let items = soroban_sdk::vec![
+        &env,
+        DeductItem {
+            amount: 100,
+            request_id: None
+        }
+    ];
     client.batch_deduct(&owner, &items);
 }
 
@@ -2476,8 +2494,14 @@ fn batch_deduct_no_routing_stays_in_vault() {
     client.init(&owner, &usdc, &Some(500), &None, &None, &None, &None);
     let items = soroban_sdk::vec![
         &env,
-        DeductItem { amount: 100, request_id: None },
-        DeductItem { amount: 50, request_id: None },
+        DeductItem {
+            amount: 100,
+            request_id: None
+        },
+        DeductItem {
+            amount: 50,
+            request_id: None
+        },
     ];
     client.batch_deduct(&owner, &items);
     assert_eq!(client.balance(), 350);
@@ -2495,12 +2519,15 @@ fn withdraw_emits_event() {
     client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
     client.withdraw(&100);
     let events = env.events().all();
-    let ev = events.iter().find(|e| {
-        e.0 == vault_address && !e.1.is_empty() && {
-            let t: Symbol = e.1.get(0).unwrap().into_val(&env);
-            t == Symbol::new(&env, "withdraw")
-        }
-    }).expect("expected withdraw event");
+    let ev = events
+        .iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "withdraw")
+            }
+        })
+        .expect("expected withdraw event");
     let (amt, bal): (i128, i128) = ev.2.into_val(&env);
     assert_eq!(amt, 100);
     assert_eq!(bal, 200);
@@ -2518,12 +2545,15 @@ fn withdraw_to_emits_event() {
     client.init(&owner, &usdc, &Some(300), &None, &None, &None, &None);
     client.withdraw_to(&recipient, &150);
     let events = env.events().all();
-    let ev = events.iter().find(|e| {
-        e.0 == vault_address && !e.1.is_empty() && {
-            let t: Symbol = e.1.get(0).unwrap().into_val(&env);
-            t == Symbol::new(&env, "withdraw_to")
-        }
-    }).expect("expected withdraw_to event");
+    let ev = events
+        .iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "withdraw_to")
+            }
+        })
+        .expect("expected withdraw_to event");
     let (amt, bal): (i128, i128) = ev.2.into_val(&env);
     assert_eq!(amt, 150);
     assert_eq!(bal, 150);
@@ -2541,12 +2571,15 @@ fn distribute_emits_event() {
     client.init(&owner, &usdc, &Some(0), &None, &None, &None, &None);
     client.distribute(&owner, &dev, &200);
     let events = env.events().all();
-    let ev = events.iter().find(|e| {
-        e.0 == vault_address && !e.1.is_empty() && {
-            let t: Symbol = e.1.get(0).unwrap().into_val(&env);
-            t == Symbol::new(&env, "distribute")
-        }
-    }).expect("expected distribute event");
+    let ev = events
+        .iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "distribute")
+            }
+        })
+        .expect("expected distribute event");
     let amt: i128 = ev.2.into_val(&env);
     assert_eq!(amt, 200);
 }
@@ -2561,8 +2594,8 @@ fn get_allowed_depositors_returns_list() {
     let (usdc, _, _) = create_usdc(&env, &owner);
     env.mock_all_auths();
     client.init(&owner, &usdc, &None, &None, &None, &None, &None);
-    client.set_allowed_depositor(&owner, &d1);
-    client.set_allowed_depositor(&owner, &d2);
+    client.set_allowed_depositor(&owner, &Some(d1));
+    client.set_allowed_depositor(&owner, &Some(d2));
     let list = client.get_allowed_depositors();
     assert_eq!(list.len(), 2);
 }
@@ -2578,12 +2611,15 @@ fn vault_unpaused_event_emitted() {
     client.pause(&owner);
     client.unpause(&owner);
     let events = env.events().all();
-    let ev = events.iter().find(|e| {
-        e.0 == vault_address && !e.1.is_empty() && {
-            let t: Symbol = e.1.get(0).unwrap().into_val(&env);
-            t == Symbol::new(&env, "vault_unpaused")
-        }
-    }).expect("expected vault_unpaused event");
+    let ev = events
+        .iter()
+        .find(|e| {
+            e.0 == vault_address && !e.1.is_empty() && {
+                let t: Symbol = e.1.get(0).unwrap().into_val(&env);
+                t == Symbol::new(&env, "vault_unpaused")
+            }
+        })
+        .expect("expected vault_unpaused event");
     let caller: Address = ev.1.get(1).unwrap().into_val(&env);
     assert_eq!(caller, owner);
 }
@@ -2604,8 +2640,8 @@ fn vault_unpaused_event_emitted() {
 #[cfg(test)]
 mod fuzz {
     use super::*;
-    use rand::{Rng, SeedableRng};
     use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
 
     /// Run a mixed sequence of deposit / deduct / batch_deduct / pause / unpause
     /// and assert after every step that:
@@ -2627,7 +2663,7 @@ mod fuzz {
             &usdc_addr,
             &Some(initial),
             &None,
-            &Some(1),          // min_deposit = 1
+            &Some(1), // min_deposit = 1
             &None,
             &Some(max_deduct_val),
         );
@@ -2648,7 +2684,13 @@ mod fuzz {
             match op {
                 // --- deposit ---
                 0 => {
-                    let amount: i128 = rng.gen_range(1..=max_deduct_val);
+                    // Clamp deposit to the depositor's actual USDC balance so the
+                    // token transfer never fails due to insufficient funds.
+                    let available = usdc_client.balance(&owner);
+                    if available <= 0 {
+                        continue;
+                    }
+                    let amount: i128 = rng.gen_range(1..=available.min(max_deduct_val).max(1));
                     if paused {
                         // deposit must fail while paused
                         assert!(client.try_deposit(&owner, &amount).is_err());
@@ -2657,42 +2699,59 @@ mod fuzz {
                         client.deposit(&owner, &amount);
                     }
                 }
-
                 // --- single deduct ---
                 1 => {
-                    let amount: i128 = rng.gen_range(1..=max_deduct_val);
-                    if sim >= amount {
-                        sim -= amount;
-                        client.deduct(&caller, &amount, &None);
+                    if paused {
+                        // skip deduct while paused — already covered by deduct_while_paused_fails
                     } else {
-                        // must fail — balance unchanged
-                        assert!(client.try_deduct(&caller, &amount, &None).is_err());
+                        let amount: i128 = rng.gen_range(1..=max_deduct_val);
+                        if sim >= amount {
+                            sim -= amount;
+                            client.deduct(&caller, &amount, &None);
+                        } else {
+                            // must fail — balance unchanged
+                            assert!(client.try_deduct(&caller, &amount, &None).is_err());
+                        }
                     }
                 }
 
                 // --- batch_deduct ---
                 2 => {
-                    // Build a batch of 1..=5 items, each within max_deduct.
-                    let n: usize = rng.gen_range(1..=5);
-                    let mut items = soroban_sdk::Vec::new(&env);
-                    let mut batch_total: i128 = 0;
-                    let mut valid = true;
-                    for _ in 0..n {
-                        let amt: i128 = rng.gen_range(1..=max_deduct_val);
-                        batch_total = match batch_total.checked_add(amt) {
-                            Some(v) => v,
-                            None => { valid = false; break; }
-                        };
-                        items.push_back(DeductItem { amount: amt, request_id: None });
-                    }
-                    if valid && sim >= batch_total {
-                        sim -= batch_total;
-                        client.batch_deduct(&caller, &items);
+                    if paused {
+                        // skip batch_deduct while paused — already covered by batch_deduct_while_paused_fails
                     } else {
-                        // batch must fail atomically — balance unchanged
-                        let before = client.balance();
-                        let _ = client.try_batch_deduct(&caller, &items);
-                        assert_eq!(client.balance(), before, "failed batch must not change balance");
+                        // Build a batch of 1..=5 items, each within max_deduct.
+                        let n: usize = rng.gen_range(1..=5);
+                        let mut items = soroban_sdk::Vec::new(&env);
+                        let mut batch_total: i128 = 0;
+                        let mut valid = true;
+                        for _ in 0..n {
+                            let amt: i128 = rng.gen_range(1..=max_deduct_val);
+                            batch_total = match batch_total.checked_add(amt) {
+                                Some(v) => v,
+                                None => {
+                                    valid = false;
+                                    break;
+                                }
+                            };
+                            items.push_back(DeductItem {
+                                amount: amt,
+                                request_id: None,
+                            });
+                        }
+                        if valid && sim >= batch_total {
+                            sim -= batch_total;
+                            client.batch_deduct(&caller, &items);
+                        } else {
+                            // batch must fail atomically — balance unchanged
+                            let before = client.balance();
+                            let _ = client.try_batch_deduct(&caller, &items);
+                            assert_eq!(
+                                client.balance(),
+                                before,
+                                "failed batch must not change balance"
+                            );
+                        }
                     }
                 }
 
@@ -2726,6 +2785,7 @@ mod fuzz {
     fn fuzz_deposit_and_deduct() {
         // Original invariant: mixed deposits and single deducts stay non-negative.
         run_sequence(0xdead_beef, 500, 10_000, 200);
+        // ensure vault is left unpaused for teardown (run_sequence already handles this)
     }
 
     #[test]
@@ -2765,7 +2825,15 @@ mod fuzz {
         let (vault_addr, client) = create_vault(&env);
 
         usdc_admin.mint(&vault_addr, &300);
-        client.init(&owner, &usdc_addr, &Some(300), &None, &None, &None, &Some(200));
+        client.init(
+            &owner,
+            &usdc_addr,
+            &Some(300),
+            &None,
+            &None,
+            &None,
+            &Some(200),
+        );
 
         let mut rng = StdRng::seed_from_u64(0x5eed_0001);
         // Build batches that sometimes overdraw; assert atomicity each time.
@@ -2804,7 +2872,15 @@ mod fuzz {
         let max_d: i128 = 100;
 
         usdc_admin.mint(&vault_addr, &10_000);
-        client.init(&owner, &usdc_addr, &Some(10_000), &None, &None, &None, &Some(max_d));
+        client.init(
+            &owner,
+            &usdc_addr,
+            &Some(10_000),
+            &None,
+            &None,
+            &None,
+            &Some(max_d),
+        );
 
         let mut rng = StdRng::seed_from_u64(0x5eed_0002);
         for _ in 0..40 {
@@ -2817,7 +2893,10 @@ mod fuzz {
             };
             let items = soroban_sdk::vec![
                 &env,
-                DeductItem { amount: amt, request_id: None }
+                DeductItem {
+                    amount: amt,
+                    request_id: None
+                }
             ];
             if exceed {
                 assert!(
