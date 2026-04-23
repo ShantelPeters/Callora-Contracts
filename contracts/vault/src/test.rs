@@ -413,6 +413,158 @@ fn deposit_paused_fails() {
 }
 
 // ---------------------------------------------------------------------------
+// Additional deposit unit tests (tasks 5.1, 5.2, 5.3)
+// ---------------------------------------------------------------------------
+
+/// Validates: Requirements 8.1, 5.2
+#[test]
+fn owner_deposit_increases_balance_and_emits_event() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    let (vault_address, client) = create_vault(&env);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    usdc_admin.mint(&owner, &500);
+    usdc_client.approve(&owner, &vault_address, &500, &1000);
+
+    let returned = client.deposit(&owner, &300);
+    assert_eq!(returned, 300);
+
+    // Capture events immediately after deposit, before any other contract call
+    // (each contract call resets the event log to that call's events only)
+    let events = env.events().all();
+    let deposit_event = events
+        .iter()
+        .find(|e| {
+            if e.0 != vault_address {
+                return false;
+            }
+            if e.1.is_empty() {
+                return false;
+            }
+            let s: Symbol = e.1.get(0).unwrap().into_val(&env);
+            s == Symbol::new(&env, "deposit")
+        })
+        .expect("expected deposit event");
+
+    assert_eq!(deposit_event.1.len(), 1, "topics must have exactly 1 entry");
+    let topic0: Symbol = deposit_event.1.get(0).unwrap().into_val(&env);
+    assert_eq!(topic0, Symbol::new(&env, "deposit"));
+
+    let (amount, new_balance): (i128, i128) = deposit_event.2.into_val(&env);
+    assert_eq!(amount, 300);
+    assert_eq!(new_balance, 300);
+
+    // Balance check after event assertions
+    assert_eq!(client.balance(), 300);
+}
+
+/// Validates: Requirements 8.7, 4.2
+#[test]
+fn balance_unchanged_after_failed_deposit() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let unauthorized = Address::generate(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    let (vault_address, client) = create_vault(&env);
+
+    env.mock_all_auths();
+    // min_deposit = 50
+    client.init(&owner, &usdc, &None, &None, &Some(50), &None, &None);
+
+    // Mint enough for the owner to deposit later (after unpause)
+    usdc_admin.mint(&owner, &200);
+    usdc_client.approve(&owner, &vault_address, &200, &10_000);
+
+    let balance_before = client.balance();
+
+    // Scenario 1: unauthorized caller
+    let result = client.try_deposit(&unauthorized, &100);
+    assert!(result.is_err(), "unauthorized caller must be rejected");
+    assert_eq!(
+        client.balance(),
+        balance_before,
+        "balance must be unchanged after unauthorized deposit"
+    );
+
+    // Scenario 2: paused vault
+    client.pause(&owner);
+    let result = client.try_deposit(&owner, &100);
+    assert!(result.is_err(), "paused vault must reject deposit");
+    assert_eq!(
+        client.balance(),
+        balance_before,
+        "balance must be unchanged after paused deposit"
+    );
+    client.unpause(&owner);
+
+    // Scenario 3: below minimum (10 < 50)
+    let result = client.try_deposit(&owner, &10);
+    assert!(result.is_err(), "below-minimum deposit must be rejected");
+    assert_eq!(
+        client.balance(),
+        balance_before,
+        "balance must be unchanged after below-minimum deposit"
+    );
+}
+
+/// Validates: Requirements 5.1, 5.2, 5.3
+#[test]
+fn deposit_event_schema_alignment() {
+    let env = Env::default();
+    let owner = Address::generate(&env);
+    let (usdc, usdc_client, usdc_admin) = create_usdc(&env, &owner);
+    let (vault_address, client) = create_vault(&env);
+
+    env.mock_all_auths();
+    client.init(&owner, &usdc, &None, &None, &None, &None, &None);
+
+    usdc_admin.mint(&owner, &200);
+    usdc_client.approve(&owner, &vault_address, &200, &10_000);
+
+    client.deposit(&owner, &150);
+
+    let events = env.events().all();
+    let deposit_event = events
+        .iter()
+        .find(|e| {
+            if e.0 != vault_address {
+                return false;
+            }
+            if e.1.is_empty() {
+                return false;
+            }
+            let s: Symbol = e.1.get(0).unwrap().into_val(&env);
+            s == Symbol::new(&env, "deposit")
+        })
+        .expect("expected deposit event");
+
+    // Schema alignment: exactly 1 topic
+    assert_eq!(
+        deposit_event.1.len(),
+        1,
+        "deposit event must have exactly 1 topic"
+    );
+    let topic0: Symbol = deposit_event.1.get(0).unwrap().into_val(&env);
+    assert_eq!(
+        topic0,
+        Symbol::new(&env, "deposit"),
+        "topic[0] must be Symbol(\"deposit\")"
+    );
+
+    // Data must decode as (amount: i128, new_balance: i128)
+    let (amount, new_balance): (i128, i128) = deposit_event.2.into_val(&env);
+    assert_eq!(amount, 150, "event data amount must match deposited amount");
+    assert_eq!(
+        new_balance, 150,
+        "event data new_balance must match vault balance"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Allowed depositor management tests
 // ---------------------------------------------------------------------------
 
@@ -3243,6 +3395,9 @@ mod fuzz {
                     } else {
                         // must fail — balance unchanged (paused or insufficient)
                         assert!(client.try_deduct(&caller, &amount, &None).is_err());
+                    } else {
+                        sim -= amount;
+                        client.deduct(&caller, &amount, &None);
                     }
                 }
 

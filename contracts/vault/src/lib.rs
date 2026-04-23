@@ -198,9 +198,6 @@ impl CalloraVault {
                     .get(&StorageKey::DepositorList)
                     .unwrap_or(Vec::new(&env));
                 if !list.contains(&d) {
-                    env.storage()
-                        .instance()
-                        .set(&StorageKey::AllowedDepositors, &d);
                     list.push_back(d);
                 }
                 env.storage()
@@ -317,8 +314,8 @@ impl CalloraVault {
     }
 
     pub fn deposit(env: Env, caller: Address, amount: i128) -> i128 {
-        caller.require_auth();
         Self::require_not_paused(env.clone());
+        caller.require_auth();
         assert!(amount > 0, "amount must be positive");
         assert!(
             Self::is_authorized_depositor(env.clone(), caller.clone()),
@@ -344,10 +341,8 @@ impl CalloraVault {
             .checked_add(amount)
             .unwrap_or_else(|| panic!("balance overflow"));
         env.storage().instance().set(&StorageKey::Meta, &meta);
-        env.events().publish(
-            (Symbol::new(&env, "deposit"), caller.clone()),
-            (amount, meta.balance),
-        );
+        env.events()
+            .publish((Symbol::new(&env, "deposit"),), (amount, meta.balance));
         meta.balance
     }
 
