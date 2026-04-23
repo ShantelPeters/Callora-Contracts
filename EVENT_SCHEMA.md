@@ -2,6 +2,10 @@
 
 Events emitted by the Callora vault contract for indexers and frontends. All topic/data types refer to Soroban/Stellar XDR values.
 
+## Change Note (2026-04)
+
+The `workspace-members-dedup` hardening patch does not introduce event additions, removals, or payload shape changes.
+
 ## Contract: Callora Vault
 
 ### `init`
@@ -132,15 +136,73 @@ Emitted when the vault is unpaused by the admin.
 ## Not yet implemented
 
 - **OwnershipTransfer**: not present in current vault; would list old_owner, new_owner.
-### `admin_nominated`
-| Field   | Location | Type   | Description   |
-|---------|----------|--------|---------------|
-| topic 0 | topics   | Symbol | `"admin_nominated"` |
-| topic 1 | topics   | Address| current admin |
-| topic 2 | topics   | Address| nominee       |
-| data    | data     | ()     | empty         |
 
+---
 
+### `vault_paused`
+
+Emitted when the vault circuit-breaker is activated by admin or owner.
+
+| Field   | Location | Type    | Description                                      |
+|---------|----------|---------|--------------------------------------------------|
+| topic 0 | topics   | Symbol  | `"vault_paused"`                                 |
+| topic 1 | topics   | Address | `caller` — admin or owner who triggered pause   |
+| data    | data     | ()      | empty                                            |
+
+**Indexer Note:** After this event is emitted, `is_paused()` view function returns `true`.
+The following operations are blocked until unpause: `deposit()`, `deduct()`, `batch_deduct()`.
+
+---
+
+### `vault_unpaused`
+
+Emitted when the vault circuit-breaker is deactivated by admin or owner.
+
+| Field   | Location | Type    | Description                                      |
+|---------|----------|---------|--------------------------------------------------|
+| topic 0 | topics   | Symbol  | `"vault_unpaused"`                               |
+| topic 1 | topics   | Address | `caller` — admin or owner who triggered unpause |
+| data    | data     | ()      | empty                                            |
+
+**Indexer Note:** After this event is emitted, `is_paused()` view function returns `false`.
+All vault operations are restored: `deposit()`, `deduct()`, `batch_deduct()`.
+
+---
+
+### View Function: `is_paused()`
+
+The vault exposes a read-only view function for off-chain systems to query the current pause state.
+
+**Signature:** `pub fn is_paused(env: Env) -> bool`
+
+**Return Value:**
+- `true` — Vault is currently paused (circuit-breaker active)
+- `false` — Vault is operational (normal state)
+
+**Safety Guarantees:**
+- **Read-only**: No state mutation or side effects
+- **Deterministic**: Identical state always produces identical output
+- **Non-panicking**: Never panics, even before initialization
+- **Safe default**: Returns `false` when pause state is unset
+
+**Indexer Usage:**
+```javascript
+// Check if vault is paused before processing transactions
+const isPaused = await vault.isPaused();
+if (isPaused) {
+  // Vault is paused - deposits and deductions are blocked
+  // Only admin/owner operations like withdraw() are allowed
+} else {
+  // Vault is operational - all functions available
+}
+```
+
+**Consistency with Events:**
+- `vault_paused` event emitted → `is_paused()` returns `true`
+- `vault_unpaused` event emitted → `is_paused()` returns `false`
+
+Indexers should use `is_paused()` for current state queries and subscribe to
+`vault_paused`/`vault_unpaused` events for state change notifications.
 
 ---
 
@@ -213,6 +275,32 @@ Emitted by `receive_payment()` **only** when `to_pool = false`. Follows the `pay
   }
 }
 ```
+
+---
+
+### `admin_nominated`
+
+Emitted when the current admin nominates a successor.
+
+| Field   | Location | Type   | Description   |
+|---------|----------|--------|-----------------------|
+| topic 0 | topics   | Symbol | `"admin_nominated"` |
+| topic 1 | topics   | Address| current admin |
+| topic 2 | topics   | Address| nominee       |
+| data    | data     | ()     | empty         |
+
+---
+
+### `admin_accepted`
+
+Emitted when the nominee accepts the admin role.
+
+| Field   | Location | Type   | Description   |
+|---------|----------|--------|-----------------------|
+| topic 0 | topics   | Symbol | `"admin_accepted"` |
+| topic 1 | topics   | Address| old admin     |
+| topic 2 | topics   | Address| new admin     |
+| data    | data     | ()     | empty         |
 
 > **Note:** `balance_credited` is never emitted when `to_pool = true`. Indexers tracking developer earnings should subscribe to this event; indexers tracking total protocol revenue should subscribe to `payment_received` with `to_pool = true`.
 
