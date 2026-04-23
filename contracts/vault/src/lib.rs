@@ -620,4 +620,4 @@ impl CalloraVault {
 mod test;
 
 #[cfg(test)]
-mod test_init_hardening;
+mod test_init_hardening;
