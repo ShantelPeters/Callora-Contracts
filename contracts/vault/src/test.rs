@@ -3159,6 +3159,7 @@ mod fuzz {
                             client.deposit(&owner, &amount);
                         }
                     }
+                    // else: deposit failed (e.g. insufficient USDC) — no sim change
                 }
 
                 // --- single deduct ---
